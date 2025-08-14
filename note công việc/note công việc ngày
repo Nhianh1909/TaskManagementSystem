@@ -1,0 +1,34 @@
+Ngày 2:
+      - Quy trình chuẩn khi làm JWT Authentication cho dự án Laravel của bạn nên như này:
+        Tạo bảng users:
+
+            Như bạn đang làm: migration users, có các cột cần thiết (name, email, password, role, v.v.)
+
+            Chạy php artisan migrate để có bảng trong DB.
+
+        Tạo API Login & Register cơ bản (chưa cần JWT):
+
+            Để test xem việc tạo user và đăng nhập bằng email/password đã chạy OK chưa.
+
+            Dùng Hash::make() để mã hóa password.
+
+        Tích hợp JWT Auth:
+
+            Cài tymon/jwt-auth hoặc Laravel Passport (nếu cần OAuth2).
+
+            Cấu hình JWT, sửa model User, tạo AuthController xử lý login/register bằng JWT.
+
+            Test lại API để đảm bảo khi login sẽ trả về token
+
+        Thêm Middleware bảo vệ route:
+
+            Các API quản lý Sprint, Task, Team… sẽ yêu cầu JWT token mới truy cập được.
+
+            Middleware auth:api (hoặc jwt.auth nếu dùng tymon/jwt-auth):
+
+        Phân quyền Role (Product Owner / Scrum Master / Developer):
+
+            Dựa vào cột role trong bảng users.
+
+            Dùng middleware custom để chặn những người không có quyền truy cập tính năng.
+
