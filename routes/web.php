@@ -5,6 +5,7 @@ use App\Http\Controllers\TeamController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\dashboardController;
 use App\Http\Controllers\TasksController;
+use App\Http\Controllers\SprintsController;
 
 Route::get('/', function () {
    return redirect()->route('home');
@@ -14,8 +15,19 @@ Route::get('/', function () {
 Route::middleware('auth')->group(function() {
     Route::view('/homepage', 'pages.homepage')->name('home');
     Route::get('/dashboard', [TasksController::class, 'index'])->name('dashboard');
-    Route::view('/tasksboard', 'pages.taskBoard')->name('tasksboard');
-    Route::view('/sprint', 'pages.sprintPlanning')->name('sprint');
+
+    //các route CRUD task trong taskboard (ĐÃ SỬA LỖI)
+    Route::get('/tasksboard', [TasksController::class, 'taskBoard'])->name('tasksboard');//route hiển thị cho taskboard
+    Route::post('/tasks', [TasksController::class, 'store'])->name('tasks.store');//route add task
+    Route::get('/tasks/{task}/edit', [TasksController::class, 'edit'])->name('tasks.edit');//route get id task
+    Route::patch('/tasks/{task}', [TasksController::class, 'update'])->name('tasks.update');//roue update task
+    Route::delete('/tasks/{task}', [TasksController::class, 'destroy'])->name('tasks.destroy');
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+    Route::get('/sprint/planning', [SprintsController::class, 'create'])->name('sprint.create');
+    // THÊM ROUTE NÀY
+    Route::post('/sprint', [SprintsController::class, 'store'])->name('sprint.store');
+    Route::post('/sprint/cancel', [SprintsController::class, 'cancel'])->name('sprint.cancel');
     // Route::view('/team', 'pages.teamManagement')->name('team');
     Route::get('/team', [TeamController::class, 'index'])->name('team');
     Route::view('/reports', 'pages.reports')->name('reports');

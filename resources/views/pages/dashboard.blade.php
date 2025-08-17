@@ -19,7 +19,7 @@
                     <div class="flex items-center justify-between">
                         <div>
                             <p class="text-sm text-gray-600 mb-1">Active Sprints</p>
-                            <p class="text-3xl font-bold text-blue-600">{{ $SprintActive }}</p>
+                            <p class="text-3xl font-bold text-blue-600">{{ $SprintActiveCount }}</p>
                         </div>
                         <div class="text-3xl text-blue-600">
                             <i class="fas fa-running"></i>
@@ -95,3 +95,52 @@
         </div>
     </div>
 @endsection
+{{-- Thêm vào cuối file resources/views/pages/dashboard.blade.php --}}
+
+@push('scripts')
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const sprintCtx = document.getElementById('sprintChart');
+
+    // Lấy dữ liệu từ controller qua Blade
+    const sprintProgressData = @json($sprintProgress);
+
+    if (sprintCtx) {
+        // Tính tổng số task để kiểm tra xem có dữ liệu không
+        const totalTasks = sprintProgressData.done + sprintProgressData.inProgress + sprintProgressData.toDo;
+
+        // Nếu không có task nào, hiển thị thông báo
+        if (totalTasks === 0) {
+            const canvasContainer = sprintCtx.parentElement;
+            canvasContainer.innerHTML = '<div class="flex items-center justify-center h-full text-gray-500">No active sprint or no tasks in current sprint.</div>';
+        } else {
+            new Chart(sprintCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Completed', 'In Progress', 'To Do'],
+                    datasets: [{
+                        // Thay thế dữ liệu tĩnh bằng dữ liệu động
+                        data: [
+                            sprintProgressData.done,
+                            sprintProgressData.inProgress,
+                            sprintProgressData.toDo
+                        ],
+                        backgroundColor: ['#2ED573', '#FFA502', '#007BFF'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                        }
+                    }
+                }
+            });
+        }
+    }
+});
+</script>
+@endpush

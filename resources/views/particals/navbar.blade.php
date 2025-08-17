@@ -9,7 +9,7 @@
                 <div class="md:ml-6 md:flex md:space-x-8">
                     <a href="{{ route('dashboard') }}" class="nav-link text-gray-700 hover:text-blue-600 px-3 py-2 text-sm font-medium transition-colors">Dashboard</a>
                     <a href="{{ route('tasksboard') }}" class="nav-link text-gray-700 hover:text-blue-600 px-3 py-2 text-sm font-medium transition-colors">Task Board</a>
-                    <a href="{{ route('sprint') }}" class="nav-link text-gray-700 hover:text-blue-600 px-3 py-2 text-sm font-medium transition-colors">Sprint Planning</a>
+                    <a href="{{ route('sprint.create') }}" class="nav-link text-gray-700 hover:text-blue-600 px-3 py-2 text-sm font-medium transition-colors">Sprint Planning</a>
                     <a href="{{ route('team') }}" class="nav-link text-gray-700 hover:text-blue-600 px-3 py-2 text-sm font-medium transition-colors">Team</a>
                     <a href="{{ route('reports') }}" class="nav-link text-gray-700 hover:text-blue-600 px-3 py-2 text-sm font-medium transition-colors">Reports</a>
                 </div>

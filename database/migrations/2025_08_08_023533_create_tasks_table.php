@@ -14,6 +14,7 @@ return new class extends Migration
         Schema::create('tasks', function (Blueprint $table) {
             $table->id();
             $table->foreignId('sprint_id')
+            ->nullable()//task có thể không thuộc sprint nào
             ->constrained('sprints')
             ->onDelete('cascade');//khi xóa sprint thì xóa task
             $table->foreignId('created_by')
