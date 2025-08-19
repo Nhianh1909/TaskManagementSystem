@@ -3,45 +3,79 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\TeamController;
 use App\Http\Controllers\AuthController;
-use App\Http\Controllers\dashboardController;
 use App\Http\Controllers\TasksController;
 use App\Http\Controllers\SprintsController;
 
-Route::get('/', function () {
-   return redirect()->route('home');
+/*
+|--------------------------------------------------------------------------
+| Web Routes
+|--------------------------------------------------------------------------
+*/
+
+// --- Authentication Routes ---
+// Các route này dành cho khách (chưa đăng nhập).
+Route::middleware('guest')->group(function () {
+    // Route để HIỂN THỊ trang đăng nhập
+    // Trỏ đến hàm showLoginForm() trong AuthController
+    Route::get('login', [AuthController::class, 'showLoginForm'])->name('login.auth');
+
+    // Route để XỬ LÝ dữ liệu khi người dùng nhấn nút đăng nhập
+    // Trỏ đến hàm login() trong AuthController
+    Route::post('login', [AuthController::class, 'login'])->name('login.post');
+
+    // Route để HIỂN THỊ trang đăng ký
+    // Trỏ đến hàm showRegistrationForm() trong AuthController
+    Route::get('signup', [AuthController::class, 'showRegistrationForm'])->name('signup.auth');
+
+    // Route để XỬ LÝ dữ liệu khi người dùng nhấn nút đăng ký
+    // Trỏ đến hàm register() trong AuthController
+    Route::post('signup', [AuthController::class, 'register'])->name('signup.post');
 });
 
-// Các trang cần đăng nhập
-Route::middleware('auth')->group(function() {
-    Route::view('/homepage', 'pages.homepage')->name('home');
+
+// --- Authenticated Routes ---
+// Tất cả các route trong group này yêu cầu người dùng phải ĐÃ ĐĂNG NHẬP.
+Route::middleware('auth')->group(function () {
     Route::get('/dashboard', [TasksController::class, 'index'])->name('dashboard');
 
-    //các route CRUD task trong taskboard (ĐÃ SỬA LỖI)
-    Route::get('/tasksboard', [TasksController::class, 'taskBoard'])->name('tasksboard');//route hiển thị cho taskboard
-    Route::post('/tasks', [TasksController::class, 'store'])->name('tasks.store');//route add task
-    Route::get('/tasks/{task}/edit', [TasksController::class, 'edit'])->name('tasks.edit');//route get id task
-    Route::patch('/tasks/{task}', [TasksController::class, 'update'])->name('tasks.update');//roue update task
+    // Task Routes
+    Route::get('/tasksboard', [TasksController::class, 'taskBoard'])->name('tasksboard');
+    Route::post('/tasks', [TasksController::class, 'store'])->name('tasks.store');
+    Route::get('/tasks/{task}/edit', [TasksController::class, 'edit'])->name('tasks.edit');
+    Route::patch('/tasks/{task}', [TasksController::class, 'update'])->name('tasks.update');
     Route::delete('/tasks/{task}', [TasksController::class, 'destroy'])->name('tasks.destroy');
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+    Route::patch('/tasks/{task}/status', [TasksController::class, 'updateStatus'])->name('tasks.updateStatus');
+
+    // Sprint Routes
     Route::get('/sprint/planning', [SprintsController::class, 'create'])->name('sprint.create');
-    // THÊM ROUTE NÀY
     Route::post('/sprint', [SprintsController::class, 'store'])->name('sprint.store');
     Route::post('/sprint/cancel', [SprintsController::class, 'cancel'])->name('sprint.cancel');
-    // Route::view('/team', 'pages.teamManagement')->name('team');
-    Route::get('/team', [TeamController::class, 'index'])->name('team');
+
+    // Team Routes (Admin only)
+    // Route::middleware('can:admin')->group(function() { // Sẽ cần thiết lập Gate/Policy cho 'can:admin'
+        Route::get('/team', [TeamController::class, 'index'])->name('team');
+        Route::post('/team/members', [TeamController::class, 'addMember'])->name('team.addMember');
+        Route::delete('/team/{team}/members/{user}', [TeamController::class, 'removeMember'])->name('team.removeMember');
+    // });
+
+    // Other Routes
     Route::view('/reports', 'pages.reports')->name('reports');
     Route::view('/settings', 'pages.settings')->name('settings');
+
+    // Logout Route
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
-    Route::post('/team/addTeam', [TeamController::class, 'add'])->name('addTeam'); // Thêm thành viên vào team
-    Route::delete('/team/{id}', [TeamController::class, 'destroy'])->name('destroy'); // Xóa thành viên khỏi team
 });
 
-// Các trang public
-Route::view('login', "auth.loginPage")->name('login.auth');
-Route::post("/login", [AuthController::class, 'login'])->name('login.post');
-Route::view('/signup', "auth.signupPage")->name('signup.auth');
-Route::post("/signup", [AuthController::class, 'register'])->name('signup.post');
+//middleware dành cho AI
+Route::middleware('auth')->group(function () {
+    // ... các route cũ của bạn
 
-Route::get('teams', [TeamController::class, 'index']);
+    // Route mới cho chức năng gợi ý của AI
+    Route::post('/tasks/suggest', [TasksController::class, 'suggestWithAI'])->name('tasks.suggest');
+});
 
+
+// Route mặc định
+Route::get('/', function () {
+    return redirect('/dashboard');
+});

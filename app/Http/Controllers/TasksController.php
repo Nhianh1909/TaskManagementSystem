@@ -1,4 +1,5 @@
 <?php
+// File: app/Http/Controllers/TasksController.php
 
 namespace App\Http\Controllers;
 
@@ -8,96 +9,103 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
-
+use Gemini\Laravel\Facades\Gemini; // Import Facade để code sạch hơn
 class TasksController extends Controller
 {
     /**
      * Dữ liệu cho trang Dashboard.
      */
-    // // trong file: app/Http/Controllers/TasksController.php
+    public function index()
+    {
+        $user = Auth::user();
+        $team = $user->team(); // Lấy team của user
 
-public function index()
-{
-    // Lấy thông tin user và team hiện tại
-    $user = Auth::user();
-    $teamId = $user->teams()->first()->id ?? null;
+        $activeSprint = null;
+        $sprintProgress = ['done' => 0, 'inProgress' => 0, 'toDo' => 0];
+        $tasksInProgress = 0;
+        $tasksCompletedToday = 0;
+        $members = 0;
 
-    // Lấy Sprint đang hoạt động của team
-    $activeSprint = Sprints::where('team_id', $teamId)->where('is_active', true)->first();
+        if ($team) {
+            $activeSprint = $team->activeSprint;
+            $members = $team->users()->count();
 
-    // Khởi tạo các biến đếm
-    $tasksInProgress = 0;
-    $tasksCompletedToday = 0;
-    $sprintProgress = [
-        'done' => 0,
-        'inProgress' => 0,
-        'toDo' => 0,
-    ];
+            if ($activeSprint) {
+                $sprintTasks = $activeSprint->tasks()->get();
+                $taskCounts = $sprintTasks->countBy('status');
 
-    // Chỉ tính toán nếu có sprint đang hoạt động
-    if ($activeSprint) {
-        // Lấy tất cả task của sprint này
-        $sprintTasks = Tasks::where('sprint_id', $activeSprint->id)->get();
+                $sprintProgress['done'] = $taskCounts->get('done', 0);
+                $sprintProgress['inProgress'] = $taskCounts->get('inProgress', 0);
+                $sprintProgress['toDo'] = $taskCounts->get('toDo', 0);
 
-        // Đếm số task theo từng trạng thái để vẽ biểu đồ
-        $taskCounts = $sprintTasks->countBy('status');
-        $sprintProgress['done'] = $taskCounts->get('done', 0);
-        $sprintProgress['inProgress'] = $taskCounts->get('inProgress', 0);
-        $sprintProgress['toDo'] = $taskCounts->get('toDo', 0);
+                $tasksInProgress = $sprintProgress['inProgress'];
+                $tasksCompletedToday = $sprintTasks
+                    ->where('status', 'done')
+                    ->where('updated_at', '>=', now()->startOfDay())
+                    ->count();
+            }
+        }
 
-        // Cập nhật các thẻ số liệu
-        $tasksInProgress = $sprintProgress['inProgress'];
-        $tasksCompletedToday = $sprintTasks
-            ->where('status', 'done')
-            ->where('updated_at', '>=', now()->startOfDay())
-            ->count();
+        $SprintActiveCount = $activeSprint ? 1 : 0;
+
+        // Lấy hoạt động gần đây (ví dụ)
+        $recentActivities = Tasks::with('assignee')->latest('updated_at')->take(5)->get()->map(fn($task) => [
+            'type' => 'task',
+            'description' => 'Task "' . $task->title . '" was updated by ' . ($task->assignee->name ?? 'N/A'),
+            'time' => $task->updated_at
+        ]);
+
+        return view('pages.dashboard', compact(
+            'SprintActiveCount',
+            'tasksInProgress',
+            'tasksCompletedToday',
+            'members',
+            'recentActivities',
+            'sprintProgress'
+        ));
     }
 
-    // --- Phần lấy Recent Activity có thể giữ nguyên hoặc tối ưu lại ---
-    $tasksToDo = Tasks::where('status', 'toDo')->count(); // Giữ lại cho thẻ thống kê chung nếu muốn
-    $SprintActiveCount = $activeSprint ? 1 : 0;
-    $members = $teamId ? User::whereHas('teams', fn($q) => $q->where('teams.id', $teamId))->count() : 0;
-
-    $taskActivities = Tasks::where('status', 'done')->latest('updated_at')->take(5)->get()->map(fn($task) => ['type' => 'task', 'description' => 'Task "' . $task->title . '" completed', 'time' => $task->updated_at]);
-    $sprintActivities = Sprints::latest()->take(5)->get()->map(fn($sprint) => ['type' => 'sprint', 'description' => 'New sprint "' . $sprint->name . '" created', 'time' => $sprint->created_at]);
-    $userActivities = User::latest()->take(5)->get()->map(fn($user) => ['type' => 'team', 'description' => $user->name . ' joined the team', 'time' => $user->created_at]);
-    $recentActivities = $taskActivities->merge($sprintActivities)->merge($userActivities)->sortByDesc('time')->take(3)->values();
-
-    return view('pages.dashboard', compact(
-        'SprintActiveCount', // Đổi tên biến để tránh nhầm lẫn
-        'tasksInProgress',
-        'tasksCompletedToday',
-        'members',
-        'recentActivities',
-        'sprintProgress' // <-- Gửi dữ liệu biểu đồ sang view
-    ));
-}
-
     /**
-     * Hiển thị trang Task Board với dữ liệu.
+     * Hiển thị trang Task Board.
      */
-    // trong file: app/Http/Controllers/TasksController.php
-
     public function taskBoard()
     {
         $user = Auth::user();
-        $teamId = $user->teams()->first()->id ?? null;
+        $team = $user->team();
 
-        $activeSprint = Sprints::where('team_id', $teamId)->where('is_active', true)->first();
+        // Lấy các task chưa thuộc sprint nào (Product Backlog)
+        $backlogTasks = Tasks::whereNull('sprint_id')->with('assignee')->orderBy('created_at', 'desc')->get();
 
-        // SỬA LẠI DÒNG NÀY: Bỏ điều kiện where('team_id', $teamId)
-        $backlogTasks = Tasks::whereNull('sprint_id')->with('user')->orderBy('created_at', 'desc')->get();
-
-        $sprintTasks = $activeSprint ? Tasks::where('sprint_id', $activeSprint->id)->with('user')->get() : collect();
-
-        $teamMembers = $teamId ? User::whereHas('teams', fn($q) => $q->where('teams.id', $teamId))->orderBy('name')->get() : collect();
+        $activeSprint = $team ? $team->activeSprint : null;
+        $sprintTasks = $activeSprint ? $activeSprint->tasks()->with('assignee')->get() : collect();
+        $teamMembers = $team ? $team->users()->orderBy('name')->get() : collect();
 
         return view('pages.taskBoard', compact('backlogTasks', 'sprintTasks', 'teamMembers', 'activeSprint'));
     }
 
     /**
-     * Lưu một task mới vào Product Backlog.
+     * Cập nhật trạng thái của Task (sử dụng cho kéo-thả).
      */
+    public function updateStatus(Request $request, Tasks $task)
+    {
+        $user = Auth::user();
+
+        // Chỉ người được giao task, SM, hoặc LeadDev mới có quyền thay đổi status
+        if ($user->id !== $task->assigned_to && !in_array($user->role, ['scrum_master', 'leadDeveloper'])) {
+            return response()->json(['message' => 'Bạn không có quyền thay đổi trạng thái của task này.'], 403);
+        }
+
+        $validated = $request->validate([
+            'status' => ['required', Rule::in(['toDo', 'inProgress', 'done'])],
+        ]);
+
+        $task->update(['status' => $validated['status']]);
+
+        return response()->json(['message' => 'Cập nhật trạng thái task thành công!']);
+    }
+
+    // Các hàm store, edit, update, destroy cho Product Backlog (PO) giữ nguyên như cũ...
+    // ... (Code CRUD của bạn đã khá tốt)
     public function store(Request $request)
     {
         if (Auth::user()->role !== 'product_owner') {
@@ -120,15 +128,12 @@ public function index()
             'assigned_to' => $validated['assigned_to'],
             'created_by' => Auth::id(),
             'sprint_id' => null,
-            'status' => 'toDo',
+            'status' => 'toDo', // Mặc định là 'toDo' nhưng nó nằm trong backlog
         ]);
 
-        return response()->json(['message' => 'Tạo task thành công!', 'task' => $task->load('user')], 201);
+        return response()->json(['message' => 'Tạo task thành công!', 'task' => $task->load('assignee')], 201);
     }
 
-    /**
-     * Lấy dữ liệu của một task để chỉnh sửa.
-     */
     public function edit(Tasks $task)
     {
         if (Auth::user()->role !== 'product_owner' || $task->sprint_id !== null) {
@@ -137,9 +142,6 @@ public function index()
         return response()->json($task);
     }
 
-    /**
-     * Cập nhật thông tin task trong Product Backlog.
-     */
     public function update(Request $request, Tasks $task)
     {
         if (Auth::user()->role !== 'product_owner' || $task->sprint_id !== null) {
@@ -156,12 +158,9 @@ public function index()
 
         $task->update($validated);
 
-        return response()->json(['message' => 'Cập nhật task thành công!', 'task' => $task->load('user')]);
+        return response()->json(['message' => 'Cập nhật task thành công!', 'task' => $task->load('assignee')]);
     }
 
-    /**
-     * Xóa một task khỏi Product Backlog.
-     */
     public function destroy(Tasks $task)
     {
         if (Auth::user()->role !== 'product_owner' || $task->sprint_id !== null) {
@@ -171,5 +170,59 @@ public function index()
         $task->delete();
 
         return response()->json(['message' => 'Xóa task thành công!']);
+    }
+
+    /**
+     * Gợi ý chi tiết công việc bằng AI.
+     */
+    public function suggestWithAI(Request $request)
+    {
+        // 1. Kiểm tra dữ liệu đầu vào
+        $validated = $request->validate([
+            'title' => 'required|string|max:255',
+        ]);
+
+        // 2. Lấy API Key từ file config (Không cần thiết nếu đã cấu hình Facade)
+        // $apiKey = config('services.gemini.key');
+
+        $taskTitle = $validated['title'];
+
+        // 3. Tạo câu lệnh (Prompt) cho AI
+        $prompt = "Based on the task title \"{$taskTitle}\", generate a JSON object with three properties: 'description', 'priority', and 'sub_tasks'.
+        - 'description' should be a detailed user story, starting with 'As a user, I want to...'.
+        - 'priority' must be one of these three values: 'low', 'medium', or 'high'.
+        - 'sub_tasks' should be an array of strings, listing smaller, actionable steps to complete the main task.
+        IMPORTANT: Your response must be only the raw JSON object, without any markdown formatting like ```json.";
+
+        // 4. Gửi yêu cầu đến API của Gemini
+        try {
+            // ===== SỬA LỖI Ở ĐÂY =====
+            // Sử dụng phương thức mới: generativeModel() và truyền tên model vào
+            // 'gemini-pro' là model mặc định, mạnh mẽ.
+            // 'gemini-1.5-flash-latest' là model mới, nhanh và hiệu quả. Bạn có thể dùng 1 trong 2.
+            $result = Gemini::gemini('gemini-1.5-flash-latest')
+                            ->generateContent($prompt);
+            // =========================
+
+            $suggestionJson = $result->text();
+            $suggestionData = json_decode($suggestionJson, true);
+
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                preg_match('/\{.*\}/s', $suggestionJson, $matches);
+                if (isset($matches[0])) {
+                    $suggestionData = json_decode($matches[0], true);
+                } else {
+                    // Nếu AI trả về lỗi, ta sẽ hiển thị lỗi đó
+                    throw new \Exception('AI response was not valid JSON. Raw response: ' . $suggestionJson);
+                }
+            }
+
+            // 5. Trả kết quả về cho frontend
+            return response()->json($suggestionData);
+
+        } catch (\Exception $e) {
+            // Xử lý nếu có lỗi
+            return response()->json(['error' => 'Failed to get suggestions from AI. ' . $e->getMessage()], 500);
+        }
     }
 }

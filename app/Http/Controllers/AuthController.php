@@ -1,54 +1,91 @@
 <?php
 
 namespace App\Http\Controllers;
+
 use App\Models\User;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Http\Request;
 
 class AuthController extends Controller
 {
+    /**
+     * Hiển thị trang đăng ký.
+     * Route: GET /signup
+     */
+    public function showRegistrationForm()
+    {
+        return view('auth.signupPage');
+    }
+
+    /**
+     * Xử lý dữ liệu từ form đăng ký.
+     * Route: POST /signup
+     */
     public function register(Request $request)
     {
         // Validate the request
         $request->validate([
             'name' => 'required|string|max:255',
-            'email'=>'required|string|email|unique:users',
-            'password'=>'required|string',
-
+            'email' => 'required|string|email|unique:users',
+            'password' => 'required|string|min:6', // Thêm min:6 để tăng bảo mật
         ]);
-        //creae a new user
+
+        // Create a new user
         $user = new User();
         $user->name = $request->name;
         $user->email = $request->email;
         $user->password = Hash::make($request->password);
-        if($user->save()){
+        // Mặc định vai trò là 'developer' khi đăng ký
+        $user->role = 'developer';
+
+        if ($user->save()) {
             return redirect()->route('login.auth')->with('success', 'User registered successfully, you can now login');
-        }else{
+        } else {
             return back()->withErrors([
                 'email' => 'Đăng ký không thành công, vui lòng thử lại.',
             ])->withInput();
         }
-
     }
 
-    public function login(Request $request){
+    /**
+     * Hiển thị trang đăng nhập.
+     * Route: GET /login
+     * ĐÂY LÀ HÀM BỊ THIẾU GÂY RA LỖI
+     */
+    public function showLoginForm()
+    {
+        return view('auth.loginPage');
+    }
+
+    /**
+     * Xử lý dữ liệu từ form đăng nhập.
+     * Route: POST /login
+     */
+    public function login(Request $request)
+    {
         // Validate the request
-        $login = $request->validate([
-           'email'=>'required|string|email',
-           'password'=>'required|string',
+        $credentials = $request->validate([
+            'email' => 'required|string|email',
+            'password' => 'required|string',
         ]);
-         // Check login
-        if (Auth::attempt($login, $request->remember)) {// Check if 'remember' is set
-            $request->session()->regenerate(); // tránh session fixation, tạo một session mới thay cho session cũ
-            return redirect()->route('dashboard')->with('success', 'Login successful!');
+
+        // Check login
+        if (Auth::attempt($credentials, $request->boolean('remember'))) {
+            $request->session()->regenerate(); // Tránh session fixation
+            return redirect()->intended('dashboard')->with('success', 'Login successful!');
         }
 
+        // Nếu đăng nhập thất bại
         return back()->withErrors([
-            'email' => 'email do not match.',
-            'password' => 'Password do not match.',
-        ])->withInput();
+            'email' => 'The provided credentials do not match our records.',
+        ])->onlyInput('email');
     }
+
+    /**
+     * Xử lý đăng xuất.
+     * Route: POST /logout
+     */
     public function logout(Request $request)
     {
         Auth::logout();

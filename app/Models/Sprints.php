@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Models;
+
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -8,17 +9,30 @@ class Sprints extends Model
 {
     use HasFactory;
 
-    /**
-     * Các trường được phép gán hàng loạt (mass assignable).
-     *
-     * @var array
-     */
     protected $fillable = [
         'name',
         'goal',
         'start_date',
         'end_date',
         'is_active',
-        'team_id', // <-- Thêm cột này vào
+        'team_id',
+        'status',
     ];
+
+    /**
+     * Mối quan hệ một-nhiều: Một Sprint có nhiều Task.
+     * ĐÂY LÀ HÀM BỊ THIẾU GÂY RA LỖI.
+     */
+    public function tasks()
+    {
+        return $this->hasMany(Tasks::class, 'sprint_id');
+    }
+
+    /**
+     * Mối quan hệ một-một: Sprint này thuộc về Team nào.
+     */
+    public function team()
+    {
+        return $this->belongsTo(Teams::class, 'team_id');
+    }
 }

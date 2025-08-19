@@ -1,10 +1,12 @@
+{{-- File: resources/views/pages/sprintPlanning.blade.php --}}
+
 @extends('layouts.app')
 
 @section('content')
 <div id="sprint" class="page">
     <div class="max-w-4xl mx-auto px-4 py-8">
 
-        {{-- Nếu có một Sprint đang hoạt động --}}
+        {{-- TRƯỜNG HỢP 1: ĐÃ CÓ SPRINT ĐANG CHẠY --}}
         @if($activeSprint)
             <h1 class="text-3xl font-bold text-gray-800 mb-2">Sprint in Progress</h1>
             <p class="text-gray-600 mb-8">Một sprint đang được thực hiện. Bạn không thể tạo sprint mới cho đến khi sprint này kết thúc hoặc bị hủy.</p>
@@ -36,13 +38,12 @@
                 </div>
             </div>
 
-        {{-- Nếu không có Sprint nào hoạt động --}}
+        {{-- TRƯỜNG HỢP 2: CHƯA CÓ SPRINT NÀO --}}
         @else
             <h1 class="text-3xl font-bold text-gray-800 mb-8">Sprint Planning</h1>
             <div class="bg-white rounded-2xl shadow-lg p-8">
-                {{-- Form tạo sprint của bạn nằm ở đây --}}
+                {{-- Form nhập thông tin cơ bản của Sprint --}}
                 <form id="sprint-form" class="space-y-6">
-                    {{-- ... Toàn bộ nội dung form của bạn không thay đổi ... --}}
                     <div class="grid md:grid-cols-2 gap-6">
                         <div>
                             <label for="sprint_name" class="block text-sm font-medium text-gray-700 mb-2">Sprint Name</label>
@@ -75,7 +76,7 @@
     </div>
 </div>
 
-{{-- Modal chỉ hiển thị khi không có sprint nào đang chạy --}}
+{{-- MODAL CHỌN TASK TỪ PRODUCT BACKLOG --}}
 @if(!$activeSprint)
 <div id="tasks-modal" class="fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center hidden z-50">
     <div class="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
@@ -114,7 +115,7 @@
 @endsection
 
 @push('scripts')
-{{-- Script chỉ cần thiết khi không có sprint nào đang chạy --}}
+{{-- Script này chỉ cần thiết khi không có sprint nào đang chạy --}}
 @if(!$activeSprint)
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -124,7 +125,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const startSprintBtn = document.getElementById('start-sprint-btn');
     const tasksModal = document.getElementById('tasks-modal');
 
-    // Mở Modal sau khi xác thực form chính
     openModalBtn.addEventListener('click', () => {
         if (sprintForm.checkValidity()) {
             tasksModal.classList.remove('hidden');
@@ -133,12 +133,10 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Đóng Modal
     closeModalBtn.addEventListener('click', () => {
         tasksModal.classList.add('hidden');
     });
 
-    // Xử lý khi nhấn nút "Start Sprint"
     startSprintBtn.addEventListener('click', async () => {
         startSprintBtn.disabled = true;
         startSprintBtn.innerHTML = '<div class="loading-spinner inline-block mr-2"></div>Starting...';
@@ -180,5 +178,5 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 </script>
-@endif
+@endif {{-- <--- LỖI LÀ DO BẠN THIẾU DÒNG NÀY --}}
 @endpush

@@ -1,106 +1,87 @@
 <?php
+// File: app/Http/Controllers/TeamController.php
 
 namespace App\Http\Controllers;
-use App\Models\User;
+
 use App\Models\Teams;
+use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
 
 class TeamController extends Controller
 {
+    /**
+     * Hiển thị trang quản lý team.
+     */
     public function index()
     {
-        $teams = Teams::with('users')->get(); // Lấy tất cả teams cùng với users liên quan
-        // dd($teams->toArray());
-        $leaders = $teams->map(function ($team){
-            //lấy đại diện thành viên của team
-            $leaderRole = match($team->name){
-                'product_owner' => 'product_owner',
-                'scrum_master' => 'scrum_master',
-                'leadDeveloper' => 'leadDeveloper',
-                default => null,
-            };
+        // Chỉ Admin mới có quyền xem trang này
+        if (Auth::user()->role !== 'admin') {
+            abort(403, 'Unauthorized action.');
+        }
 
-            //lọc user theo role tương ứng
-            $leader = $team->users->firstWhere('role', $leaderRole);
+        // Lấy tất cả các team và các thành viên trong team đó
+        $teams = Teams::with('users')->get();
+        $allUsers = User::orderBy('name')->get(); // Lấy tất cả user để hiển thị trong modal
 
-            return [
-            'team_id' => $team->id,
-            'team_name' => $team->name,
-            'team_description' => $team->description,
-            'leader' => $leader ? [
-                'id' => $leader->id,
-                'name' => $leader->name,
-                'email' => $leader->email,
-                'role' => $leader->role
-            ] : null
-            ];
-        });
-        //dd($leaders); // Hiển thị thông tin các team và leader của chúng
-         return view('pages.teamManagement', [
-            'teamMembers' => $leaders
-        ]);
+        return view('pages.teamManagement', compact('teams', 'allUsers'));
     }
-    public function add(Request $request)
+
+    /**
+     * Thêm một thành viên mới vào team.
+     */
+    public function addMember(Request $request)
     {
-        $data = $request->validate([
-            'name'  => 'required|string|max:255',
-            'role'  => 'required|string',
-            'email' => 'required|email',
+        if (Auth::user()->role !== 'admin') {
+            abort(403);
+        }
+
+        $validated = $request->validate([
+            'user_id' => 'required|exists:users,id',
+            'team_id' => 'required|exists:teams,id',
+            'roleInTeam' => ['required', Rule::in(['product_owner', 'scrum_master', 'leadDeveloper', 'developer'])],
         ]);
 
-        $teamIds = $request->input('team_id', []); // mảng các team_id
+        $team = Teams::find($validated['team_id']);
+        $user = User::find($validated['user_id']);
 
-        // 1. Kiểm tra user tồn tại theo email
-        $user = User::where('email', $data['email'])->first();
-
-        if (!$user) {
-            return back()->withErrors(['email' => 'Email không tồn tại trong hệ thống']);
+        // Kiểm tra xem vai trò chính đã tồn tại trong team chưa (trừ developer)
+        if ($validated['roleInTeam'] !== 'developer') {
+            $roleExists = $team->users()->where('roleInTeam', $validated['roleInTeam'])->exists();
+            if ($roleExists) {
+                return back()->with('error', 'Vai trò ' . $validated['roleInTeam'] . ' đã tồn tại trong team này.');
+            }
         }
 
-        // 2. Kiểm tra user đã thuộc team nào trong danh sách chưa
-        $isInTeam = Teams::whereIn('id', $teamIds)
-            ->whereHas('users', function ($q) use ($user) {
-                $q->where('users.id', $user->id);
-            })
-            ->exists();
+        // Gắn user vào team
+        // syncWithoutDetaching sẽ thêm mới nếu chưa có, không làm gì nếu đã có
+        $team->users()->syncWithoutDetaching([
+            $user->id => ['roleInTeam' => $validated['roleInTeam']]
+        ]);
 
-        // 3. Kiểm tra vai trò đã tồn tại trong bất kỳ team nào chưa
-        $roleExists = Teams::whereIn('id', $teamIds)
-            ->whereHas('users', function ($q) use ($data) {
-                $q->where('role', $data['role']);
-            })
-            ->exists();
+        // Cập nhật luôn vai trò chính của User trong bảng users
+        $user->role = $validated['roleInTeam'];
+        $user->save();
 
-        if ($roleExists) {
-            return back()->withErrors(['role' => 'Một trong các team này đã có người giữ vai trò này']);
-        }
-
-        // Nếu user đã trong team → cập nhật vai trò
-        if ($isInTeam) {
-            $user->role = $data['role'];
-            $user->save();
-
-            return redirect()->route('team')->with('success', 'Cập nhật vai trò thành công!');
-        }
-
-        // 4. Nếu user chưa thuộc team nào trong danh sách → attach vào từng team
-        foreach ($teamIds as $id) {
-            $team = Teams::findOrFail($id);
-            $team->users()->attach($user->id);
-        }
-
-        return redirect()->route('team')->with('success', 'Thêm thành viên thành công!');
+        return redirect()->route('team')->with('success', 'Thêm thành viên vào team thành công!');
     }
 
-
-    public function destroy($id) {
-        $member = User::find($id);
-        if (!$member) {
-            return response()->json(['error' => 'Không tìm thấy thành viên'], 404);
+    /**
+     * Xóa một thành viên khỏi team.
+     */
+    public function removeMember(Request $request, Teams $team, User $user)
+    {
+        if (Auth::user()->role !== 'admin') {
+            abort(403);
         }
-        $member->delete();
-        return response()->json(['message' => 'Xóa thành công']);
+
+        // Gỡ user khỏi team
+        $team->users()->detach($user->id);
+
+        // Cân nhắc: Có nên hạ vai trò của user trong bảng `users` về 'developer' không?
+        // Ví dụ: $user->update(['role' => 'developer']);
+
+        return redirect()->route('team')->with('success', 'Đã xóa thành viên khỏi team.');
     }
-
-
 }

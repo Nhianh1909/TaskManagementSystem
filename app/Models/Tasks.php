@@ -1,19 +1,13 @@
 <?php
-
 namespace App\Models;
+
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Models\User;
 
 class Tasks extends Model
 {
     use HasFactory;
 
-    /**
-     * Các trường được phép gán hàng loạt.
-     *
-     * @var array
-     */
     protected $fillable = [
         'title',
         'description',
@@ -25,7 +19,27 @@ class Tasks extends Model
         'status',
     ];
 
-    public function user(){
+    /**
+     * Mối quan hệ một-một: Task này được giao cho User nào.
+     */
+    public function assignee()
+    {
         return $this->belongsTo(User::class, 'assigned_to');
+    }
+
+    /**
+     * Mối quan hệ một-một: Task này được tạo bởi User nào.
+     */
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /**
+     * Mối quan hệ một-một: Task này thuộc về Sprint nào.
+     */
+    public function sprint()
+    {
+        return $this->belongsTo(Sprints::class, 'sprint_id');
     }
 }
