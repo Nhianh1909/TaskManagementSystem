@@ -237,10 +237,16 @@
                             body: JSON.stringify({ title: title })
                         });
 
-                        const result = await response.json();
+                        // Nếu server trả về lỗi (response.ok = false)
                         if (!response.ok) {
-                            throw new Error(result.error || 'Failed to get suggestions.');
+                            // Cố gắng đọc nội dung server trả về dưới dạng văn bản (có thể là trang lỗi HTML)
+                            const errorText = await response.text();
+                            // Ném ra một lỗi mới với nội dung chi tiết này
+                            throw new Error(`Server responded with status ${response.status}. Response: ${errorText}`);
                         }
+
+                        // Nếu server trả về thành công, xử lý JSON
+                        const result = await response.json();
 
                         if (result.description) {
                             let fullDescription = result.description;
@@ -257,7 +263,11 @@
                         }
 
                     } catch (error) {
-                        alert('Error: ' + error.message);
+                        // ===== HIỂN THỊ LỖI CHI TIẾT RA CONSOLE =====
+                        console.error('An error occurred during the AI suggestion request:');
+                        console.error(error); // In toàn bộ đối tượng lỗi
+                        alert('An error occurred. Please check the browser console (F12) for more details.');
+                        // ===============================================
                     } finally {
                         aiSuggestBtn.disabled = false;
                         aiSuggestBtn.innerHTML = '<i class="fas fa-magic"></i> AI';

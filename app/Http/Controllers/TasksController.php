@@ -9,7 +9,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
-use Gemini\Laravel\Facades\Gemini; // Import Facade để code sạch hơn
+use Illuminate\Support\Facades\Http;
 class TasksController extends Controller
 {
     /**
@@ -177,34 +177,57 @@ class TasksController extends Controller
      */
     public function suggestWithAI(Request $request)
     {
-        // 1. Kiểm tra dữ liệu đầu vào
         $validated = $request->validate([
             'title' => 'required|string|max:255',
         ]);
 
-        // 2. Lấy API Key từ file config (Không cần thiết nếu đã cấu hình Facade)
-        // $apiKey = config('services.gemini.key');
+        // 1. Lấy API key trực tiếp từ file .env
+        $apiKey = env('GEMINI_API_KEY');
+        if (!$apiKey) {
+            return response()->json(['error' => 'GEMINI_API_KEY is not set in .env file.'], 500);
+        }
+
+        // 2. Đây chính là "link" bạn thấy trong hướng dẫn
+        $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={$apiKey}";
 
         $taskTitle = $validated['title'];
 
-        // 3. Tạo câu lệnh (Prompt) cho AI
-        $prompt = "Based on the task title \"{$taskTitle}\", generate a JSON object with three properties: 'description', 'priority', and 'sub_tasks'.
-        - 'description' should be a detailed user story, starting with 'As a user, I want to...'.
-        - 'priority' must be one of these three values: 'low', 'medium', or 'high'.
-        - 'sub_tasks' should be an array of strings, listing smaller, actionable steps to complete the main task.
-        IMPORTANT: Your response must be only the raw JSON object, without any markdown formatting like ```json.";
+        // 3. Chuẩn bị "payload" (dữ liệu gửi đi) theo đúng định dạng Gemini yêu cầu
+        $payload = [
+            'contents' => [
+                [
+                    'parts' => [
+                        [
+                            'text' => "Based on the task title \"{$taskTitle}\", generate a JSON object with three properties: 'description', 'priority', and 'sub_tasks'.
+                            - 'description' should be a detailed user story, starting with 'As a user, I want to...'.
+                            - 'priority' must be one of these three values: 'low', 'medium', or 'high'.
+                            - 'sub_tasks' should be an array of strings, listing smaller, actionable steps to complete the main task.
+                            IMPORTANT: Your response must be only the raw JSON object, without any markdown formatting like ```json."
+                        ]
+                    ]
+                ]
+            ]
+        ];
 
-        // 4. Gửi yêu cầu đến API của Gemini
         try {
-            // ===== SỬA LỖI Ở ĐÂY =====
-            // Sử dụng phương thức mới: generativeModel() và truyền tên model vào
-            // 'gemini-pro' là model mặc định, mạnh mẽ.
-            // 'gemini-1.5-flash-latest' là model mới, nhanh và hiệu quả. Bạn có thể dùng 1 trong 2.
-            $result = Gemini::gemini('gemini-1.5-flash-latest')
-                            ->generateContent($prompt);
-            // =========================
+            // 4. Dùng HTTP client của Laravel để gửi yêu cầu POST đến link API
+            $response = Http::withHeaders([
+                'Content-Type' => 'application/json',
+            ])->post($url, $payload);
 
-            $suggestionJson = $result->text();
+            // 5. Kiểm tra nếu có lỗi từ phía Google
+            if (!$response->successful()) {
+                // Trả về lỗi chi tiết từ Google để gỡ lỗi
+                return response()->json([
+                    'error' => 'API request failed.',
+                    'status' => $response->status(),
+                    'body' => $response->json() ?? $response->body(),
+                ], $response->status());
+            }
+
+            // 6. Xử lý kết quả trả về
+            $result = $response->json();
+            $suggestionJson = $result['candidates'][0]['content']['parts'][0]['text'] ?? '';
             $suggestionData = json_decode($suggestionJson, true);
 
             if (json_last_error() !== JSON_ERROR_NONE) {
@@ -212,17 +235,18 @@ class TasksController extends Controller
                 if (isset($matches[0])) {
                     $suggestionData = json_decode($matches[0], true);
                 } else {
-                    // Nếu AI trả về lỗi, ta sẽ hiển thị lỗi đó
                     throw new \Exception('AI response was not valid JSON. Raw response: ' . $suggestionJson);
                 }
             }
 
-            // 5. Trả kết quả về cho frontend
             return response()->json($suggestionData);
 
         } catch (\Exception $e) {
-            // Xử lý nếu có lỗi
-            return response()->json(['error' => 'Failed to get suggestions from AI. ' . $e->getMessage()], 500);
+            // Xử lý các lỗi khác (ví dụ: lỗi kết nối, SSL)
+            return response()->json([
+                'error' => 'An exception occurred.',
+                'message' => $e->getMessage(),
+            ], 500);
         }
     }
 }
