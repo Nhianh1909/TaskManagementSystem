@@ -5,6 +5,7 @@ use App\Http\Controllers\TeamController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\TasksController;
 use App\Http\Controllers\SprintsController;
+use Illuminate\Support\Facades\Auth;
 
 /*
 |--------------------------------------------------------------------------
@@ -51,12 +52,11 @@ Route::middleware('auth')->group(function () {
     Route::post('/sprint', [SprintsController::class, 'store'])->name('sprint.store');
     Route::post('/sprint/cancel', [SprintsController::class, 'cancel'])->name('sprint.cancel');
 
-    // Team Routes (Admin only)
-    // Route::middleware('can:admin')->group(function() { // Sẽ cần thiết lập Gate/Policy cho 'can:admin'
-        Route::get('/team', [TeamController::class, 'index'])->name('team');
-        Route::post('/team/members', [TeamController::class, 'addMember'])->name('team.addMember');
-        Route::delete('/team/{team}/members/{user}', [TeamController::class, 'removeMember'])->name('team.removeMember');
-    // });
+    // --- Team Management Routes ---
+    Route::get('/team-management', [TeamController::class, 'index'])->name('team.management');
+    Route::post('/team/add-member', [TeamController::class, 'addMember'])->name('team.addMember');
+    Route::delete('/team/{team}/remove-member/{user}', [TeamController::class, 'removeMember'])->name('team.removeMember');
+    Route::put('/team/{team}/update-role/{member}', [TeamController::class, 'updateMemberRole'])->name('team.updateRole');
 
     // Other Routes
     Route::view('/reports', 'pages.reports')->name('reports');
@@ -78,4 +78,29 @@ Route::middleware('auth')->group(function () {
 // Route mặc định
 Route::get('/', function () {
     return redirect('/dashboard');
+});
+Route::get('/fix-my-account', function() {
+    // 1. Kiểm tra xem bạn đã đăng nhập chưa
+    if (!Auth::check()) {
+        return 'Vui lòng đăng nhập bằng tài khoản bạn muốn sửa trước, sau đó truy cập lại trang này.';
+    }
+
+    $user = Auth::user();
+    $team = \App\Models\Teams::first(); // Lấy team đầu tiên có trong database
+
+    if (!$team) {
+        return 'Không tìm thấy team nào. Vui lòng chạy lệnh "php artisan migrate:fresh --seed" trước.';
+    }
+
+    // 2. Gán quyền Product Owner của team này cho tài khoản của bạn
+    // syncWithoutDetaching sẽ thêm mới nếu chưa có, hoặc không làm gì nếu đã có
+    $team->users()->syncWithoutDetaching([
+        $user->id => ['roleInTeam' => 'product_owner']
+    ]);
+
+    // 3. Cập nhật luôn vai trò chung của bạn cho chắc chắn
+    $user->role = 'product_owner';
+    $user->save();
+
+    return 'Thành công! Tài khoản "' . $user->name . '" của bạn đã được gán quyền Product Owner cho team "' . $team->name . '". Hãy quay lại trang Team Management để kiểm tra.';
 });

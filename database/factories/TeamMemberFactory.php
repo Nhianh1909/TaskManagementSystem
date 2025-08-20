@@ -20,7 +20,7 @@ class TeamMemberFactory extends Factory
         return [
             'team_id'=>Teams::inRandomOrder()->first()->id ?? Teams::factory(),
             'user_id'=>User::inRandomOrder()->first()->id ?? User::factory(),
-            'roleInTeam'=>fake()->randomElement(['admin', 'product_owner','scrum_master', 'leadDeveloper', 'developer']),
+            'roleInTeam'=>fake()->randomElement(['product_owner','scrum_master', 'developer']),
             'joined_at'=>fake()->dateTimeBetween('-1 year', 'now'),
             'created_at'=>now(),
             'updated_at'=>now(),

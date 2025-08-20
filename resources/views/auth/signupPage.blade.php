@@ -1,7 +1,16 @@
 @extends('layouts.app')
 
 @section('content')
-
+@if ($errors->any())
+    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+        <strong class="font-bold">Đã có lỗi xảy ra!</strong>
+        <ul class="mt-2 list-disc list-inside">
+            @foreach ($errors->all() as $error)
+                <li>{{ $error }}</li>
+            @endforeach
+        </ul>
+    </div>
+@endif
 <div id="signup" class="page">
         <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-cyan-50 py-12 px-4">
             <div class="max-w-md w-full space-y-8">
@@ -23,11 +32,11 @@
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Password</label>
-                            <input type="password" namme="password" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" placeholder="Create a password">
+                            <input type="password" name="password" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" placeholder="Create a password">
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Confirm Password</label>
-                            <input type="password" name="password" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" placeholder="Confirm your password">
+                            <input type="password" name="password_confirmation" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" placeholder="Confirm your password">
                         </div>
                     </div>
                     <button type="submit" class="w-full gradient-gold text-white py-3 rounded-lg font-semibold text-lg glow-effect">

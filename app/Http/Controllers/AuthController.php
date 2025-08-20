@@ -25,10 +25,12 @@ class AuthController extends Controller
     public function register(Request $request)
     {
         // Validate the request
+         // Validate the request
         $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|unique:users',
-            'password' => 'required|string|min:6', // Thêm min:6 để tăng bảo mật
+            // Thêm 'confirmed' để Laravel tự động kiểm tra với ô password_confirmation
+            'password' => 'required|string|confirmed',
         ]);
 
         // Create a new user

@@ -19,7 +19,7 @@ return new class extends Migration
             $table->string('password');
             $table->rememberToken();
             $table->string('avatar')->nullable();
-            $table->enum('role', ['admin', 'product_owner','scrum_master', 'leadDeveloper', 'developer'])->default('developer');
+            $table->enum('role', ['product_owner','scrum_master','developer'])->default('developer');
             $table->timestamps();
         });
 

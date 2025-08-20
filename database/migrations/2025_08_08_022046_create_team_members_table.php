@@ -22,7 +22,7 @@ return new class extends Migration
             ->constrained('users')
             ->onDelete('cascade');//xóa user thì xóa luôn record này
 
-            $table->enum('roleInTeam', ['admin', 'product_owner','scrum_master', 'leadDeveloper', 'developer'])
+            $table->enum('roleInTeam', ['product_owner','scrum_master', 'developer'])
             ->default('developer');
             $table->timestamp('joined_at')->useCurrent();
             $table->timestamps();
