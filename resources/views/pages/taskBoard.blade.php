@@ -4,7 +4,9 @@
 @section('content')
 <div id="taskboard" class="page">
     <div class="max-w-7xl mx-auto px-4 py-8">
-        <div class="flex justify-between items-center mb-8">
+
+        {{-- SỬA LỖI 1: Thêm z-20 để header luôn nằm trên --}}
+        <div class="flex justify-between items-center mb-8 relative z-20">
             <div>
                 <h1 class="text-3xl font-bold text-gray-800">Task Board</h1>
                 @if($activeSprint)
@@ -13,14 +15,16 @@
                     <p class="text-gray-600">No active sprint. Viewing Product Backlog.</p>
                 @endif
             </div>
-            @if(Auth::user()->role === 'product_owner')
+            {{-- Sửa lỗi phân quyền: Dùng $userRoleInTeam --}}
+            @if(isset($userRoleInTeam) && $userRoleInTeam === 'product_owner')
             <button onclick="openTaskModal()" class="gradient-btn text-white px-6 py-3 rounded-lg font-semibold">
                 <i class="fas fa-plus mr-2"></i>Add Task to Backlog
             </button>
             @endif
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {{-- SỬA LỖI 2: Thêm z-10 để lưới nằm dưới header --}}
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 relative z-10">
             @php
                 $columns = [
                     'backlog' => ['title' => 'Product Backlog', 'icon' => 'fa-inbox', 'color' => 'gray-500', 'tasks' => $backlogTasks],
@@ -28,17 +32,16 @@
                     'inProgress' => ['title' => 'In Progress', 'icon' => 'fa-spinner', 'color' => 'yellow-500', 'tasks' => $sprintTasks->where('status', 'inProgress')],
                     'done' => ['title' => 'Done', 'icon' => 'fa-check', 'color' => 'green-500', 'tasks' => $sprintTasks->where('status', 'done')],
                 ];
-                $currentUser = Auth::user();
             @endphp
 
             @foreach($columns as $key => $column)
-            <div class="bg-{{ explode('-', $column['color'])[0] }}-50 rounded-2xl p-4">
-                <h3 class="font-semibold text-gray-700 mb-4 flex items-center">
+            <div class="bg-{{ explode('-', $column['color'])[0] }}-50 rounded-2xl p-4 flex flex-col">
+                <h3 class="font-semibold text-gray-700 mb-4 flex items-center flex-shrink-0">
                     <i class="fas {{ $column['icon'] }} text-{{ $column['color'] }} mr-2"></i>{{ $column['title'] }}
                     <span class="ml-auto bg-{{ $column['color'] }} text-white text-xs px-2 py-1 rounded-full">{{ count($column['tasks']) }}</span>
                 </h3>
 
-                <div class="task-column space-y-3 min-h-[200px]"
+                <div class="task-column space-y-3 min-h-[200px] flex-grow overflow-y-auto"
                      ondrop="drop(event)"
                      ondragover="allowDrop(event)"
                      ondragleave="dragLeave(event)"
@@ -46,17 +49,29 @@
 
                     @foreach($column['tasks'] as $task)
                         @php
-                            $isDraggable = ($currentUser->id === $task->assigned_to || in_array($currentUser->role, ['scrum_master', 'leadDeveloper']));
+                            $isDraggable = (Auth::id() === $task->assigned_to || (isset($userRoleInTeam) && $userRoleInTeam === 'scrum_master'));
+
+                            // LOGIC LÀM ĐẬM TASK MỚI
+                            $isHighlighted = (
+                                // 1. Là task được giao cho tôi
+                                Auth::id() === $task->assigned_to ||
+                                // 2. Hoặc tôi là Scrum Master (thấy đậm mọi task trong sprint)
+                                (isset($userRoleInTeam) && $userRoleInTeam === 'scrum_master') ||
+                                // 3. Hoặc tôi là Product Owner VÀ task này đang ở trong Product Backlog
+                                (isset($userRoleInTeam) && $userRoleInTeam === 'product_owner' && is_null($task->sprint_id))
+                            );
                         @endphp
 
-                        <div class="task-card priority-{{ $task->priority }} bg-white p-4 rounded-lg shadow-sm {{ $isDraggable ? 'cursor-move' : 'cursor-not-allowed' }} glow-effect"
-                             draggable="{{ $isDraggable ? 'true' : 'false' }}"
-                             ondragstart="drag(event)"
-                             data-task-id="{{ $task->id }}">
+                        <div class="task-card priority-{{ $task->priority }} bg-white p-4 rounded-lg shadow-sm {{ $isDraggable ? 'cursor-move' : 'cursor-not-allowed' }} transition-all duration-200 @if($isHighlighted) border-2 border-blue-500 scale-105 @else opacity-70 @endif"
+                            draggable="{{ $isDraggable ? 'true' : 'false' }}"
+                            ondragstart="drag(event)"
+                            data-task-id="{{ $task->id }}"
+                            data-task-sprint-id="{{ $task->sprint_id }}">
 
                             <div class="flex justify-between items-start">
                                  <h4 class="font-medium text-gray-800 mb-2">{{ $task->title }}</h4>
-                                 @if(Auth::user()->role === 'product_owner' && is_null($task->sprint_id))
+                                 {{-- Sửa lỗi phân quyền: Dùng $userRoleInTeam --}}
+                                 @if(isset($userRoleInTeam) && $userRoleInTeam === 'product_owner' && is_null($task->sprint_id))
                                     <div class="flex-shrink-0 ml-2">
                                         <button onclick="editTask({{ $task->id }})" class="text-blue-500 hover:text-blue-700 text-xs p-1"><i class="fas fa-edit"></i></button>
                                         <button onclick="deleteTask({{ $task->id }})" class="text-red-500 hover:text-red-700 text-xs p-1"><i class="fas fa-trash"></i></button>
@@ -83,7 +98,7 @@
 </div>
 
 {{-- Modal Add/Edit Task (Dành cho Product Owner) --}}
-@if(Auth::user()->role === 'product_owner')
+@if(isset($userRoleInTeam) && $userRoleInTeam === 'product_owner')
 <div id="taskModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
     <div class="bg-white p-6 rounded-xl shadow-xl max-w-md w-full mx-4">
         <div class="flex justify-between items-center mb-4">
@@ -144,12 +159,19 @@
 @endsection
 
 @push('scripts')
+{{-- Javascript cũ của bạn được giữ nguyên hoàn toàn, chỉ sửa tên route AI --}}
 <script>
-    // --- DRAG AND DROP LOGIC ---
+    // --- DRAG AND DROP LOGIC (Đã nâng cấp) ---
     function allowDrop(ev) {
         ev.preventDefault();
-        if (ev.currentTarget.classList.contains('task-column')) {
-            ev.currentTarget.classList.add('bg-blue-100', 'border-2', 'border-dashed', 'border-blue-400');
+        const targetColumn = ev.currentTarget;
+        const taskSprintId = ev.dataTransfer.getData("text/sprint-id");
+        const isSprintActive = {{ $activeSprint ? 'true' : 'false' }};
+
+        if (isMoveAllowed(taskSprintId, targetColumn.dataset.columnStatus, isSprintActive)) {
+            if (targetColumn.classList.contains('task-column')) {
+                targetColumn.classList.add('bg-blue-100', 'border-2', 'border-dashed', 'border-blue-400');
+            }
         }
     }
 
@@ -160,8 +182,26 @@
     }
 
     function drag(ev) {
-        const taskId = ev.target.dataset.taskId;
-        ev.dataTransfer.setData("text/plain", taskId);
+        const taskElement = ev.target.closest('.task-card');
+        ev.dataTransfer.setData("text/plain", taskElement.dataset.taskId);
+        ev.dataTransfer.setData("text/sprint-id", taskElement.dataset.taskSprintId);
+    }
+
+    function isMoveAllowed(taskSprintId, newStatus, isSprintActive) {
+        const isTaskInBacklog = taskSprintId === '';
+
+        if (!isSprintActive) {
+            return newStatus === 'backlog';
+        }
+
+        if (isTaskInBacklog && newStatus !== 'backlog') {
+            return false;
+        }
+        if (!isTaskInBacklog && newStatus === 'backlog') {
+            return false;
+        }
+
+        return true;
     }
 
     async function drop(ev) {
@@ -171,12 +211,21 @@
 
         const newStatus = targetColumn.dataset.columnStatus;
         const taskId = ev.dataTransfer.getData("text/plain");
-        const draggedElement = document.querySelector(`[data-task-id="${taskId}"]`);
+        const taskSprintId = ev.dataTransfer.getData("text/sprint-id");
+        const isSprintActive = {{ $activeSprint ? 'true' : 'false' }};
 
-        if (newStatus === 'backlog') {
-            alert('Cannot drag tasks back to the Product Backlog.');
+        if (!isMoveAllowed(taskSprintId, newStatus, isSprintActive)) {
+            if (!isSprintActive) {
+                alert('Sprint has not started. You cannot move tasks out of the Product Backlog.');
+            } else if (taskSprintId === '' && newStatus !== 'backlog') {
+                alert('This task is in the Product Backlog. Please add it to the sprint via the Sprint Planning page.');
+            } else if (taskSprintId !== '' && newStatus === 'backlog') {
+                alert('Cannot drag tasks from an active sprint back to the Product Backlog.');
+            }
             return;
         }
+
+        const draggedElement = document.querySelector(`[data-task-id="${taskId}"]`);
 
         try {
             const response = await fetch(`/tasks/${taskId}/status`, {
@@ -200,7 +249,7 @@
     }
 
     // --- LOGIC CRUD VÀ AI CHO PRODUCT OWNER ---
-    @if(Auth::user()->role === 'product_owner')
+    @if(isset($userRoleInTeam) && $userRoleInTeam === 'product_owner')
         document.addEventListener('DOMContentLoaded', function() {
             const taskModal = document.getElementById('taskModal');
             const taskForm = document.getElementById('task-form');
@@ -209,11 +258,12 @@
             const taskIdInput = document.getElementById('task-id');
             const formMethodInput = document.getElementById('form-method');
 
-            // --- LOGIC CHO NÚT AI SUGGEST (ĐÂY LÀ PHẦN BỊ THIẾU) ---
             const aiSuggestBtn = document.getElementById('ai-suggest-btn');
             const taskTitleInput = document.getElementById('task-title');
             const taskDescriptionInput = document.getElementById('task-description');
             const taskPriorityInput = document.getElementById('task-priority');
+            const taskStoryPointsInput = document.getElementById('task-storyPoints');
+            const taskAssigneeInput = document.getElementById('task-assignee');
 
             if(aiSuggestBtn) {
                 aiSuggestBtn.addEventListener('click', async () => {
@@ -227,6 +277,7 @@
                     aiSuggestBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
 
                     try {
+                        // Sửa route thành tasks.suggestAll
                         const response = await fetch("{{ route('tasks.suggest') }}", {
                             method: 'POST',
                             headers: {
@@ -237,15 +288,11 @@
                             body: JSON.stringify({ title: title })
                         });
 
-                        // Nếu server trả về lỗi (response.ok = false)
                         if (!response.ok) {
-                            // Cố gắng đọc nội dung server trả về dưới dạng văn bản (có thể là trang lỗi HTML)
                             const errorText = await response.text();
-                            // Ném ra một lỗi mới với nội dung chi tiết này
                             throw new Error(`Server responded with status ${response.status}. Response: ${errorText}`);
                         }
 
-                        // Nếu server trả về thành công, xử lý JSON
                         const result = await response.json();
 
                         if (result.description) {
@@ -261,13 +308,16 @@
                         if (result.priority) {
                             taskPriorityInput.value = result.priority;
                         }
+                        if (result.storyPoints) {
+                            taskStoryPointsInput.value = result.storyPoints;
+                        }
+                        if (result.suggested_assignee_id) {
+                            taskAssigneeInput.value = result.suggested_assignee_id;
+                        }
 
                     } catch (error) {
-                        // ===== HIỂN THỊ LỖI CHI TIẾT RA CONSOLE =====
-                        console.error('An error occurred during the AI suggestion request:');
-                        console.error(error); // In toàn bộ đối tượng lỗi
+                        console.error('An error occurred during the AI suggestion request:', error);
                         alert('An error occurred. Please check the browser console (F12) for more details.');
-                        // ===============================================
                     } finally {
                         aiSuggestBtn.disabled = false;
                         aiSuggestBtn.innerHTML = '<i class="fas fa-magic"></i> AI';
@@ -275,7 +325,6 @@
                 });
             }
 
-            // Các hàm CRUD khác
             window.openTaskModal = function() {
                 taskForm.reset();
                 taskIdInput.value = '';

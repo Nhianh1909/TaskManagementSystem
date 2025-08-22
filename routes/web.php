@@ -71,7 +71,7 @@ Route::middleware('auth')->group(function () {
     // ... các route cũ của bạn
 
     // Route mới cho chức năng gợi ý của AI
-    Route::post('/tasks/suggest', [TasksController::class, 'suggestWithAI'])->name('tasks.suggest');
+    Route::post('/tasks/suggest', [TasksController::class, 'suggestAllWithAI'])->name('tasks.suggest');
 });
 
 

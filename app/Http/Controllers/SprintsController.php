@@ -1,6 +1,4 @@
 <?php
-// File: app/Http/Controllers/SprintsController.php
-// Controller này đã khá tốt, chỉ cần chỉnh sửa nhỏ để code sạch hơn
 
 namespace App\Http\Controllers;
 
@@ -15,18 +13,17 @@ class SprintsController extends Controller
 {
     public function create()
     {
-        $user = Auth::user();
-        if (!in_array($user->role, ['scrum_master', 'leadDeveloper'])) {
-            return redirect()->route('dashboard')->with('error', 'Bạn không có quyền truy cập trang này.');
-        }
+        // Dùng Gate để kiểm tra quyền truy cập
+        $this->authorize('plan-sprints');
 
-        $team = $user->team();
+        $user = Auth::user();
+        $team = $user->teams()->first(); // Lấy team đầu tiên của user
 
         if (!$team) {
             return redirect()->route('dashboard')->with('error', 'Bạn chưa thuộc team nào.');
         }
 
-        $activeSprint = $team->activeSprint;
+        $activeSprint = $team->sprints()->where('is_active', true)->first();
 
         $backlogTasks = collect();
         if (!$activeSprint) {
@@ -39,10 +36,8 @@ class SprintsController extends Controller
 
     public function store(Request $request)
     {
-        $user = Auth::user();
-        if (!in_array($user->role, ['scrum_master', 'leadDeveloper'])) {
-            return response()->json(['message' => 'Bạn không có quyền thực hiện hành động này.'], 403);
-        }
+        // Dùng Gate để kiểm tra quyền tạo sprint
+        $this->authorize('plan-sprints');
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
@@ -55,7 +50,7 @@ class SprintsController extends Controller
 
         DB::beginTransaction();
         try {
-            $team = $user->team();
+            $team = Auth::user()->teams()->first();
             if (!$team) {
                 throw new \Exception('User is not assigned to any team.');
             }
@@ -73,11 +68,10 @@ class SprintsController extends Controller
             ]);
 
             // Cập nhật các task được chọn vào sprint mới
-            Tasks::whereIn('id', $validated['task_ids'])
-                ->update([
-                    'sprint_id' => $sprint->id,
-                    'status' => 'toDo',
-                ]);
+            Tasks::whereIn('id', $validated['task_ids'])->update([
+                'sprint_id' => $sprint->id,
+                'status' => 'toDo',
+            ]);
 
             DB::commit();
 
@@ -95,13 +89,11 @@ class SprintsController extends Controller
 
     public function cancel()
     {
-        $user = Auth::user();
-        if (!in_array($user->role, ['scrum_master', 'leadDeveloper'])) {
-            return back()->with('error', 'Bạn không có quyền thực hiện hành động này.');
-        }
+        // Dùng Gate để kiểm tra quyền hủy sprint
+        $this->authorize('plan-sprints');
 
-        $team = $user->team();
-        $activeSprint = $team ? $team->activeSprint : null;
+        $team = Auth::user()->teams()->first();
+        $activeSprint = $team ? $team->sprints()->where('is_active', true)->first() : null;
 
         if (!$activeSprint) {
             return back()->with('error', 'Không có Sprint nào đang hoạt động để hủy.');
@@ -111,12 +103,12 @@ class SprintsController extends Controller
         try {
             // Đưa các task chưa "Done" trở lại Product Backlog
             $activeSprint->tasks()
-                 ->where('status', '!=', 'done')
-                 ->update(['sprint_id' => null, 'status' => 'toDo']);
+                ->where('status', '!=', 'done')
+                ->update(['sprint_id' => null, 'status' => 'toDo']);
 
             // Hủy kích hoạt sprint
             $activeSprint->is_active = false;
-            $activeSprint->status = 'completed'; // Hoặc một trạng thái 'cancelled' nếu bạn muốn
+            $activeSprint->status = 'completed';
             $activeSprint->save();
 
             DB::commit();

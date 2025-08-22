@@ -25,8 +25,17 @@ class TeamController extends Controller
                       ->with('users') // Tải sẵn danh sách thành viên của mỗi team
                       ->get();
 
-        // Lấy tất cả user để hiển thị trong modal "Add Member"
-        $allUsers = User::orderBy('name')->get();
+        // --- BẮT ĐẦU SỬA LOGIC Ở ĐÂY ---
+
+        // Lấy ID của tất cả các user đã thuộc về các team mà người này quản lý
+        $memberIds = $teams->pluck('users.*.id')->flatten()->unique();
+
+        // Lấy tất cả user CHƯA CÓ trong danh sách thành viên ở trên
+        $allUsers = User::whereNotIn('id', $memberIds)
+                        ->orderBy('name')
+                        ->get();
+
+        // --- KẾT THÚC SỬA LOGIC ---
 
         return view('pages.teamManagement', compact('teams', 'allUsers'));
     }
@@ -47,6 +56,12 @@ class TeamController extends Controller
 
         // Dùng Gate để kiểm tra người dùng hiện tại có quyền quản lý team này không
         $this->authorize('manage-team-members', $team);
+        if (in_array($validated['roleInTeam'], ['product_owner', 'scrum_master'])) {
+            $roleExists = $team->users()->where('roleInTeam', $validated['roleInTeam'])->exists();
+            if ($roleExists) {
+                return back()->with('error', "This team already has a {$validated['roleInTeam']}.");
+            }
+        }
 
         // Kiểm tra xem người dùng đã ở trong team chưa
         if ($team->users()->where('user_id', $userToAdd->id)->exists()) {
@@ -80,26 +95,48 @@ class TeamController extends Controller
     /**
      * Cập nhật vai trò của một thành viên trong team.
      */
+    /**
+     * Cập nhật vai trò của một thành viên trong team, với logic bảo vệ vai trò Product Owner.
+     */
     public function updateMemberRole(Request $request, Teams $team, User $member)
     {
-        // Dùng Gate để kiểm tra quyền
+        // 1. Kiểm tra quyền quản lý chung
         $this->authorize('manage-team-members', $team);
 
+        // 2. Validate dữ liệu đầu vào
         $validated = $request->validate([
             'roleInTeam' => ['required', Rule::in(['product_owner', 'scrum_master', 'developer'])],
         ]);
 
-        // Không cho phép tước quyền của chính mình nếu là người quản lý duy nhất
-        if (Auth::id() === $member->id) {
-             $managersCount = $team->users()->whereIn('roleInTeam', ['product_owner', 'scrum_master'])->count();
-             if ($managersCount <= 1) {
-                 return back()->with('error', 'Cannot change your own role as you are the only manager.');
-             }
+        $newRole = $validated['roleInTeam'];
+        $currentRole = $team->users()->find($member->id)->pivot->roleInTeam;
+
+        // 3. LOGIC MỚI: Ngăn chặn việc "hạ cấp" trực tiếp Product Owner
+        if ($currentRole === 'product_owner' && $newRole !== 'product_owner') {
+            return back()->with('error', 'You must transfer the Product Owner role to another user before changing this member\'s role.');
         }
 
-        $team->users()->updateExistingPivot($member->id, [
-            'roleInTeam' => $validated['roleInTeam']
-        ]);
+        // 4. LOGIC MỚI: Xử lý việc "chuyển giao" vai trò Product Owner
+        if ($newRole === 'product_owner' && $currentRole !== 'product_owner') {
+            // Tìm PO cũ trong team
+            $oldPO = $team->users()->where('roleInTeam', 'product_owner')->first();
+            if ($oldPO) {
+                // Tự động hạ cấp PO cũ thành developer
+                $team->users()->updateExistingPivot($oldPO->id, ['roleInTeam' => 'developer']);
+            }
+        }
+
+        // (Bạn có thể áp dụng logic tương tự cho Scrum Master nếu muốn)
+        if ($newRole === 'scrum_master' && $currentRole !== 'scrum_master') {
+            $oldSM = $team->users()->where('roleInTeam', 'scrum_master')->first();
+            if ($oldSM) {
+                 $team->users()->updateExistingPivot($oldSM->id, ['roleInTeam' => 'developer']);
+            }
+        }
+
+
+        // 5. Tiến hành cập nhật vai trò cho thành viên được chọn
+        $team->users()->updateExistingPivot($member->id, ['roleInTeam' => $newRole]);
 
         return back()->with('success', 'Member role updated successfully.');
     }

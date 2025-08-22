@@ -2,7 +2,7 @@
 // File: app/Http/Controllers/TasksController.php
 
 namespace App\Http\Controllers;
-
+use Illuminate\Support\Facades\DB;
 use App\Models\Sprints;
 use App\Models\Tasks;
 use App\Models\User;
@@ -19,6 +19,7 @@ class TasksController extends Controller
     {
         $user = Auth::user();
         $team = $user->team(); // Lấy team của user
+
 
         $activeSprint = null;
         $sprintProgress = ['done' => 0, 'inProgress' => 0, 'toDo' => 0];
@@ -71,16 +72,41 @@ class TasksController extends Controller
     public function taskBoard()
     {
         $user = Auth::user();
-        $team = $user->team();
+        // Lấy team đầu tiên mà người dùng thuộc về
+        $team = $user->teams()->first();
 
-        // Lấy các task chưa thuộc sprint nào (Product Backlog)
-        $backlogTasks = Tasks::whereNull('sprint_id')->with('assignee')->orderBy('created_at', 'desc')->get();
+        // Nếu người dùng chưa thuộc team nào, chuyển hướng họ
+        if (!$team) {
+            return redirect()->route('dashboard')->with('error', 'You must be part of a team to view the task board.');
+        }
 
-        $activeSprint = $team ? $team->activeSprint : null;
+        // --- LOGIC MỚI: TÍNH TOÁN VAI TRÒ VÀ GỬI SANG VIEW ---
+        // Lấy vai trò cụ thể của người dùng trong team đó
+        $userRoleInTeam = $team->users()->find($user->id)?->pivot->roleInTeam;
+
+        // Lấy sprint đang hoạt động của team
+        $activeSprint = $team->sprints()->where('is_active', true)->first();
+
+        // Lấy các task trong Product Backlog (chưa thuộc sprint nào)
+        $backlogTasks = Tasks::whereNull('sprint_id')
+                             ->with('assignee')
+                             ->orderBy('created_at', 'desc')
+                             ->get();
+
+        // Lấy các task trong sprint đang hoạt động
         $sprintTasks = $activeSprint ? $activeSprint->tasks()->with('assignee')->get() : collect();
-        $teamMembers = $team ? $team->users()->orderBy('name')->get() : collect();
 
-        return view('pages.taskBoard', compact('backlogTasks', 'sprintTasks', 'teamMembers', 'activeSprint'));
+        // Lấy danh sách thành viên trong team cho dropdown "Assignee"
+        $teamMembers = $team->users;
+
+        // Gửi tất cả các biến cần thiết sang view
+        return view('pages.taskBoard', compact(
+            'backlogTasks',
+            'sprintTasks',
+            'activeSprint',
+            'teamMembers',
+            'userRoleInTeam' // <--- Gửi biến mới sang view
+        ));
     }
 
     /**
@@ -89,9 +115,11 @@ class TasksController extends Controller
     public function updateStatus(Request $request, Tasks $task)
     {
         $user = Auth::user();
+        $team = $user->teams()->first();
+        $userRoleInTeam = $team ? $team->users()->find($user->id)?->pivot->roleInTeam : null;
 
-        // Chỉ người được giao task, SM, hoặc LeadDev mới có quyền thay đổi status
-        if ($user->id !== $task->assigned_to && !in_array($user->role, ['scrum_master', 'leadDeveloper'])) {
+        // Chỉ người được giao task hoặc Scrum Master mới có quyền thay đổi status
+        if ($user->id !== $task->assigned_to && $userRoleInTeam !== 'scrum_master') {
             return response()->json(['message' => 'Bạn không có quyền thay đổi trạng thái của task này.'], 403);
         }
 
@@ -100,15 +128,16 @@ class TasksController extends Controller
         ]);
 
         $task->update(['status' => $validated['status']]);
-
         return response()->json(['message' => 'Cập nhật trạng thái task thành công!']);
     }
 
-    // Các hàm store, edit, update, destroy cho Product Backlog (PO) giữ nguyên như cũ...
-    // ... (Code CRUD của bạn đã khá tốt)
     public function store(Request $request)
     {
-        if (Auth::user()->role !== 'product_owner') {
+        $user = Auth::user();
+        $team = $user->teams()->first();
+        $userRoleInTeam = $team ? $team->users()->find($user->id)?->pivot->roleInTeam : null;
+
+        if ($userRoleInTeam !== 'product_owner') {
             return response()->json(['message' => 'Bạn không có quyền tạo task.'], 403);
         }
 
@@ -128,15 +157,19 @@ class TasksController extends Controller
             'assigned_to' => $validated['assigned_to'],
             'created_by' => Auth::id(),
             'sprint_id' => null,
-            'status' => 'toDo', // Mặc định là 'toDo' nhưng nó nằm trong backlog
+            'status' => 'toDo',
         ]);
 
         return response()->json(['message' => 'Tạo task thành công!', 'task' => $task->load('assignee')], 201);
     }
 
-    public function edit(Tasks $task)
+   public function edit(Tasks $task)
     {
-        if (Auth::user()->role !== 'product_owner' || $task->sprint_id !== null) {
+        $user = Auth::user();
+        $team = $user->teams()->first();
+        $userRoleInTeam = $team ? $team->users()->find($user->id)?->pivot->roleInTeam : null;
+
+        if ($userRoleInTeam !== 'product_owner' || $task->sprint_id !== null) {
             return response()->json(['message' => 'Bạn không có quyền sửa task này.'], 403);
         }
         return response()->json($task);
@@ -144,7 +177,11 @@ class TasksController extends Controller
 
     public function update(Request $request, Tasks $task)
     {
-        if (Auth::user()->role !== 'product_owner' || $task->sprint_id !== null) {
+        $user = Auth::user();
+        $team = $user->teams()->first();
+        $userRoleInTeam = $team ? $team->users()->find($user->id)?->pivot->roleInTeam : null;
+
+        if ($userRoleInTeam !== 'product_owner' || $task->sprint_id !== null) {
             return response()->json(['message' => 'Bạn không có quyền cập nhật task này.'], 403);
         }
 
@@ -157,96 +194,124 @@ class TasksController extends Controller
         ]);
 
         $task->update($validated);
-
         return response()->json(['message' => 'Cập nhật task thành công!', 'task' => $task->load('assignee')]);
     }
 
     public function destroy(Tasks $task)
     {
-        if (Auth::user()->role !== 'product_owner' || $task->sprint_id !== null) {
+        $user = Auth::user();
+        $team = $user->teams()->first();
+        $userRoleInTeam = $team ? $team->users()->find($user->id)?->pivot->roleInTeam : null;
+
+        if ($userRoleInTeam !== 'product_owner' || $task->sprint_id !== null) {
             return response()->json(['message' => 'Bạn không có quyền xóa task này.'], 403);
         }
 
         $task->delete();
-
         return response()->json(['message' => 'Xóa task thành công!']);
     }
 
     /**
      * Gợi ý chi tiết công việc bằng AI.
      */
-    public function suggestWithAI(Request $request)
+    /**
+     * Gợi ý TOÀN BỘ thông tin task bằng AI và logic chọn người thực hiện.
+     */
+    public function suggestAllWithAI(Request $request)
     {
         $validated = $request->validate([
             'title' => 'required|string|max:255',
         ]);
 
-        // 1. Lấy API key trực tiếp từ file .env
         $apiKey = env('GEMINI_API_KEY');
         if (!$apiKey) {
-            return response()->json(['error' => 'GEMINI_API_KEY is not set in .env file.'], 500);
+            return response()->json(['error' => 'GEMINI_API_KEY is not set.'], 500);
         }
 
-        // 2. Đây chính là "link" bạn thấy trong hướng dẫn
         $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={$apiKey}";
-
         $taskTitle = $validated['title'];
 
-        // 3. Chuẩn bị "payload" (dữ liệu gửi đi) theo đúng định dạng Gemini yêu cầu
+        // --- Bắt đầu logic tìm người thực hiện (assignee) ---
+        $suggestedAssigneeId = null;
+        $user = Auth::user();
+        $team = $user->team();
+
+        if ($team) {
+            $teamMembers = $team->users()
+                ->where('roleInTeam', 'developer') // Chỉ tìm developer
+                ->withCount(['tasks as total_story_points' => function ($query) {
+                    $query->select(DB::raw('sum(storyPoints)'));
+                }])
+                ->get();
+
+            if ($teamMembers->isNotEmpty()) {
+                // Ưu tiên người rảnh (story points = 0 hoặc null)
+                $freeMembers = $teamMembers->where('total_story_points', '<=', 0);
+
+                if ($freeMembers->isNotEmpty()) {
+                    $suggestedAssigneeId = $freeMembers->random()->id;
+                } else {
+                    // Nếu không có ai rảnh, chọn người có tổng story points nhỏ nhất
+                    $suggestedAssigneeId = $teamMembers->sortBy('total_story_points')->first()->id;
+                }
+            }
+        }
+        // --- Kết thúc logic tìm assignee ---
+
+        // Prompt mới yêu cầu AI trả về thêm storyPoints
+         // ======================== BẮT ĐẦU PROMPT MỚI THÔNG MINH HƠN ========================
         $payload = [
             'contents' => [
                 [
                     'parts' => [
                         [
-                            'text' => "Based on the task title \"{$taskTitle}\", generate a JSON object with three properties: 'description', 'priority', and 'sub_tasks'.
-                            - 'description' should be a detailed user story, starting with 'As a user, I want to...'.
-                            - 'priority' must be one of these three values: 'low', 'medium', or 'high'.
-                            - 'sub_tasks' should be an array of strings, listing smaller, actionable steps to complete the main task.
-                            IMPORTANT: Your response must be only the raw JSON object, without any markdown formatting like ```json."
+                            'text' => "Analyze the task title \"{$taskTitle}\" and generate a JSON object with 'description', 'priority', 'storyPoints', and 'sub_tasks'.
+
+                            Follow these steps for reasoning:
+                            1.  **Estimate Complexity**: Based on the title, determine if the task is 'Simple', 'Medium', or 'Complex'.
+                            2.  **Assign Story Points**:
+                                - If 'Simple', assign a storyPoints value of 1, 2, or 3.
+                                - If 'Medium', assign a storyPoints value of 5 or 8.
+                                - If 'Complex', assign a storyPoints value of 13.
+                            3.  **Set Priority**: Determine the priority as 'low', 'medium', or 'high'.
+                            4.  **Write Description**: Create a user story starting with 'As a user, I want to...'.
+                            5.  **List Sub-tasks**: Create an array of smaller, actionable steps.
+
+                            Your final output must be ONLY the raw JSON object, without any markdown formatting like ```json."
                         ]
                     ]
                 ]
             ]
         ];
+        // ========================= KẾT THÚC PROMPT MỚI =========================
+
 
         try {
-            // 4. Dùng HTTP client của Laravel để gửi yêu cầu POST đến link API
-            $response = Http::withHeaders([
-                'Content-Type' => 'application/json',
-            ])->post($url, $payload);
+            $response = Http::post($url, $payload);
 
-            // 5. Kiểm tra nếu có lỗi từ phía Google
             if (!$response->successful()) {
-                // Trả về lỗi chi tiết từ Google để gỡ lỗi
-                return response()->json([
-                    'error' => 'API request failed.',
-                    'status' => $response->status(),
-                    'body' => $response->json() ?? $response->body(),
-                ], $response->status());
+                return response()->json(['error' => 'API request failed.', 'details' => $response->json()], 500);
             }
 
-            // 6. Xử lý kết quả trả về
             $result = $response->json();
             $suggestionJson = $result['candidates'][0]['content']['parts'][0]['text'] ?? '';
+
+            // Xóa các ký tự markdown JSON
+            $suggestionJson = trim(str_replace(['```json', '```'], '', $suggestionJson));
+
             $suggestionData = json_decode($suggestionJson, true);
 
             if (json_last_error() !== JSON_ERROR_NONE) {
-                preg_match('/\{.*\}/s', $suggestionJson, $matches);
-                if (isset($matches[0])) {
-                    $suggestionData = json_decode($matches[0], true);
-                } else {
-                    throw new \Exception('AI response was not valid JSON. Raw response: ' . $suggestionJson);
-                }
+                 return response()->json(['error' => 'AI response was not valid JSON.', 'raw_response' => $suggestionJson], 500);
             }
+
+            // Gắn ID của người được gợi ý vào kết quả trả về
+            $suggestionData['suggested_assignee_id'] = $suggestedAssigneeId;
 
             return response()->json($suggestionData);
 
         } catch (\Exception $e) {
-            // Xử lý các lỗi khác (ví dụ: lỗi kết nối, SSL)
-            return response()->json([
-                'error' => 'An exception occurred.',
-                'message' => $e->getMessage(),
-            ], 500);
+            return response()->json(['error' => 'An exception occurred.', 'message' => $e->getMessage()], 500);
         }
     }
 }

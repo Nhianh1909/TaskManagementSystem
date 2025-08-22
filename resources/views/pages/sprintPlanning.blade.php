@@ -178,5 +178,5 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 </script>
-@endif {{-- <--- LỖI LÀ DO BẠN THIẾU DÒNG NÀY --}}
+@endif
 @endpush

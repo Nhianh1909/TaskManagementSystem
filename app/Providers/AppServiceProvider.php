@@ -41,5 +41,11 @@ class AppServiceProvider extends ServiceProvider
             // Trả về true nếu là PO hoặc SM
             return in_array($roleInTeam, ['product_owner', 'scrum_master']);
         });
+        Gate::define('plan-sprints', function (User $user) {
+        // Kiểm tra vai trò trong team (roleInTeam) thay vì vai trò chung
+        return $user->teams()
+                    ->whereIn('roleInTeam', ['product_owner', 'scrum_master'])
+                    ->exists();
+    });
     }
 }
