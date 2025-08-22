@@ -5,6 +5,7 @@ use App\Http\Controllers\TeamController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\TasksController;
 use App\Http\Controllers\SprintsController;
+use App\Http\Controllers\ReportController;
 use Illuminate\Support\Facades\Auth;
 
 /*
@@ -59,7 +60,7 @@ Route::middleware('auth')->group(function () {
     Route::put('/team/{team}/update-role/{member}', [TeamController::class, 'updateMemberRole'])->name('team.updateRole');
 
     // Other Routes
-    Route::view('/reports', 'pages.reports')->name('reports');
+    Route::get('/reports', [ReportController::class, 'index'])->name('reports');
     Route::view('/settings', 'pages.settings')->name('settings');
 
     // Logout Route

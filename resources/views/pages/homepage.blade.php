@@ -6,7 +6,7 @@
         <section class="relative min-h-screen flex items-center justify-center overflow-hidden parallax" style="background: linear-gradient(135deg, #007BFF 0%, #00BFFF 100%);">
             <div class="particles" id="particles"></div>
             <div class="relative z-10 text-center text-white px-4">
-                <h1 class="text-5xl md:text-7xl font-bold mb-6 animate-pulse">
+                <h1 class="text-5xl md:text-7xl font-bold mb-6">
                     Welcome to <span class="text-yellow-300">ScrumSpark</span>
                 </h1>
                 <p class="text-xl md:text-2xl mb-8 max-w-3xl mx-auto">

@@ -96,8 +96,8 @@ class TasksController extends Controller
         // Lấy các task trong sprint đang hoạt động
         $sprintTasks = $activeSprint ? $activeSprint->tasks()->with('assignee')->get() : collect();
 
-        // Lấy danh sách thành viên trong team cho dropdown "Assignee"
-        $teamMembers = $team->users;
+         // Lấy danh sách thành viên trong team, loại trừ vai trò 'scrum_master'
+        $teamMembers = $team->users()->wherePivot('roleInTeam', '!=', 'scrum_master')->get();
 
         // Gửi tất cả các biến cần thiết sang view
         return view('pages.taskBoard', compact(

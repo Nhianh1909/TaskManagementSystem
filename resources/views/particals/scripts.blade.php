@@ -99,6 +99,9 @@
             background: linear-gradient(135deg, rgba(0, 123, 255, 0.1), rgba(0, 191, 255, 0.1));
             border: 2px dashed var(--primary-blue);
         }
+        .animate-pulse {
+            animation: none !important;
+        }
 
         /* Dark Mode */
         .dark {

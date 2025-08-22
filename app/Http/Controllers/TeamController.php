@@ -110,7 +110,16 @@ class TeamController extends Controller
 
         $newRole = $validated['roleInTeam'];
         $currentRole = $team->users()->find($member->id)->pivot->roleInTeam;
+        // Ngăn chặn việc thay đổi vai trò của Scrum Master cuối cùng
+        if ($currentRole === 'scrum_master' && $newRole !== 'scrum_master') {
+            // Đếm xem trong team có bao nhiêu Scrum Master
+            $scrumMasterCount = $team->users()->where('roleInTeam', 'scrum_master')->count();
 
+            // Nếu chỉ có 1 SM (chính là người đang bị đổi vai trò), thì chặn lại
+            if ($scrumMasterCount <= 1) {
+                return back()->with('error', 'Cannot change role. This is the last Scrum Master in the team. Please assign the SM role to another member first.');
+            }
+        }
         // 3. LOGIC MỚI: Ngăn chặn việc "hạ cấp" trực tiếp Product Owner
         if ($currentRole === 'product_owner' && $newRole !== 'product_owner') {
             return back()->with('error', 'You must transfer the Product Owner role to another user before changing this member\'s role.');
