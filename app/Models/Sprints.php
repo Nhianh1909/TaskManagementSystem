@@ -21,7 +21,6 @@ class Sprints extends Model
 
     /**
      * Mối quan hệ một-nhiều: Một Sprint có nhiều Task.
-     * ĐÂY LÀ HÀM BỊ THIẾU GÂY RA LỖI.
      */
     public function tasks()
     {

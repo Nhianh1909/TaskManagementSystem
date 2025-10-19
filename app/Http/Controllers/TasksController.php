@@ -80,7 +80,6 @@ class TasksController extends Controller
             return redirect()->route('dashboard')->with('error', 'You must be part of a team to view the task board.');
         }
 
-        // --- LOGIC MỚI: TÍNH TOÁN VAI TRÒ VÀ GỬI SANG VIEW ---
         // Lấy vai trò cụ thể của người dùng trong team đó
         $userRoleInTeam = $team->users()->find($user->id)?->pivot->roleInTeam;
 
@@ -227,8 +226,22 @@ class TasksController extends Controller
         if (!$apiKey) {
             return response()->json(['error' => 'GEMINI_API_KEY is not set.'], 500);
         }
-
-        $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={$apiKey}";
+// curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent" \
+//   -H 'Content-Type: application/json' \
+//   -H 'X-goog-api-key: AIzaSyA_ARhHDWWyliidfZP8g5SKEtM7GME_UJ8' \
+//   -X POST \
+//   -d '{
+//     "contents": [
+//       {
+//         "parts": [
+//           {
+//             "text": "Explain how AI works in a few words"
+//           }
+//         ]
+//       }
+//     ]
+//   }'
+        $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={$apiKey}";
         $taskTitle = $validated['title'];
 
         // --- Bắt đầu logic tìm người thực hiện (assignee) ---
@@ -259,7 +272,6 @@ class TasksController extends Controller
         // --- Kết thúc logic tìm assignee ---
 
         // Prompt mới yêu cầu AI trả về thêm storyPoints
-         // ======================== BẮT ĐẦU PROMPT MỚI THÔNG MINH HƠN ========================
         $payload = [
             'contents' => [
                 [
@@ -283,7 +295,6 @@ class TasksController extends Controller
                 ]
             ]
         ];
-        // ========================= KẾT THÚC PROMPT MỚI =========================
 
 
         try {

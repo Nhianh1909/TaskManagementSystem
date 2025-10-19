@@ -1,4 +1,3 @@
-{{-- File: resources/views/pages/taskBoard.blade.php --}}
 @extends('layouts.app')
 
 @section('content')
@@ -159,7 +158,6 @@
 @endsection
 
 @push('scripts')
-{{-- Javascript cũ của bạn được giữ nguyên hoàn toàn, chỉ sửa tên route AI --}}
 <script>
     // --- DRAG AND DROP LOGIC (Đã nâng cấp) ---
     function allowDrop(ev) {
@@ -277,7 +275,6 @@
                     aiSuggestBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
 
                     try {
-                        // Sửa route thành tasks.suggestAll
                         const response = await fetch("{{ route('tasks.suggest') }}", {
                             method: 'POST',
                             headers: {

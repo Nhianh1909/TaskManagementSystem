@@ -1,4 +1,3 @@
-{{-- File: resources/views/pages/sprintPlanning.blade.php --}}
 
 @extends('layouts.app')
 

@@ -25,7 +25,6 @@ class TeamController extends Controller
                       ->with('users') // Tải sẵn danh sách thành viên của mỗi team
                       ->get();
 
-        // --- BẮT ĐẦU SỬA LOGIC Ở ĐÂY ---
 
         // Lấy ID của tất cả các user đã thuộc về các team mà người này quản lý
         $memberIds = $teams->pluck('users.*.id')->flatten()->unique();
@@ -35,7 +34,6 @@ class TeamController extends Controller
                         ->orderBy('name')
                         ->get();
 
-        // --- KẾT THÚC SỬA LOGIC ---
 
         return view('pages.teamManagement', compact('teams', 'allUsers'));
     }
@@ -92,9 +90,7 @@ class TeamController extends Controller
         return back()->with('success', 'Member removed successfully.');
     }
 
-    /**
-     * Cập nhật vai trò của một thành viên trong team.
-     */
+
     /**
      * Cập nhật vai trò của một thành viên trong team, với logic bảo vệ vai trò Product Owner.
      */
