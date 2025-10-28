@@ -18,6 +18,7 @@
                     <h2 class="text-3xl font-bold text-gray-900">Welcome Back</h2>
                     <p class="mt-2 text-gray-600">Sign in to your ScrumSpark account</p>
                 </div>
+                {{-- handleLogin có thể dư --}}
                 <form class="mt-8 space-y-6" onsubmit="handleLogin(event)" method="POST" action="{{ route('login.post') }}">
                     @csrf
                     <div class="space-y-4">

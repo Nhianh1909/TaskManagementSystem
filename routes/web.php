@@ -7,6 +7,7 @@ use App\Http\Controllers\TasksController;
 use App\Http\Controllers\SprintsController;
 use App\Http\Controllers\ReportController;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 /*
 |--------------------------------------------------------------------------
@@ -15,7 +16,6 @@ use Illuminate\Support\Facades\Auth;
 */
 
 // --- Authentication Routes ---
-// Các route này dành cho khách (chưa đăng nhập).
 Route::middleware('guest')->group(function () {
     // Route để HIỂN THỊ trang đăng nhập
     // Trỏ đến hàm showLoginForm() trong AuthController
@@ -105,3 +105,36 @@ Route::get('/fix-my-account', function() {
 
     return 'Thành công! Tài khoản "' . $user->name . '" của bạn đã được gán quyền Product Owner cho team "' . $team->name . '". Hãy quay lại trang Team Management để kiểm tra.';
 });
+
+// ===== ROUTE TEST TẠM THỜI (NHỚ XÓA SAU KHI XONG) =====
+Route::get('/test-members', function() {
+
+    // 1. Lấy user và team (giống như trong hàm AI)
+    $user = Auth::user();
+    if (!$user) {
+        return 'Bạn cần đăng nhập trước.';
+    }
+
+    // Lấy team của user.
+    // Lưu ý: tệp TasksController dùng $user->team(),
+    // nhưng model User.php lại định nghĩa là teams() (số nhiều).
+    // Chúng ta sẽ dùng .teams()->first() cho chắc chắn.
+    $team = $user->teams()->first();
+
+    if (!$team) {
+        return 'User này không thuộc team nào.';
+    }
+
+    echo "Đang test với team: " . $team->name . "<br>";
+
+    // 2. Chạy chính xác đoạn query bạn muốn test
+    $teamMembers = $team->users()
+        ->where('roleInTeam', 'developer') // Chỉ tìm developer
+        ->withCount(['tasks as total_story_points' => function ($query) {
+            $query->select(DB::raw('sum(storyPoints)')); // Tính tổng story points
+        }])
+        ->get();
+
+
+
+})->middleware('auth'); // Bắt buộc phải đăng nhập để chạy test

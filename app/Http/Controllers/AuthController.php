@@ -9,10 +9,7 @@ use Illuminate\Support\Facades\Hash;
 
 class AuthController extends Controller
 {
-    /**
-     * Hiển thị trang đăng ký.
-     * Route: GET /signup
-     */
+    //tạo một cái hàm hiển thị form đăng ký
     public function showRegistrationForm()
     {
         return view('auth.signupPage');
@@ -28,8 +25,8 @@ class AuthController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|unique:users',
-            // Thêm 'confirmed' để Laravel tự động kiểm tra với ô password_confirmation
             'password' => 'required|string|confirmed',
+            // Thêm 'confirmed' để Laravel tự động kiểm tra với ô password_confirmation
         ]);
 
         // Create a new user
@@ -50,9 +47,7 @@ class AuthController extends Controller
     }
 
     /**
-     * Hiển thị trang đăng nhập.
-     * Route: GET /login
-     * ĐÂY LÀ HÀM BỊ THIẾU GÂY RA LỖI
+     * Hàm show trang đăng nhập
      */
     public function showLoginForm()
     {
@@ -60,8 +55,7 @@ class AuthController extends Controller
     }
 
     /**
-     * Xử lý dữ liệu từ form đăng nhập.
-     * Route: POST /login
+     * Hàm xử lý đăng nhập
      */
     public function login(Request $request)
     {

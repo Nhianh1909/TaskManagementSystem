@@ -291,7 +291,7 @@
                         }
 
                         const result = await response.json();
-
+                        console.log('AI Suggestion Result:', result);
                         if (result.description) {
                             let fullDescription = result.description;
                             if (result.sub_tasks && result.sub_tasks.length > 0) {

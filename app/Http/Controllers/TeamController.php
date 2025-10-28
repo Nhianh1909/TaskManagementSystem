@@ -26,7 +26,7 @@ class TeamController extends Controller
                       ->get();
 
 
-        // Lấy ID của tất cả các user đã thuộc về các team mà người này quản lý
+        // Lấy ID của tất cả các user đã thuộc về các team mà người này quản lý sau đó dùng flatten để gộp lại và loại bỏ trùng lặp
         $memberIds = $teams->pluck('users.*.id')->flatten()->unique();
 
         // Lấy tất cả user CHƯA CÓ trong danh sách thành viên ở trên
@@ -48,12 +48,15 @@ class TeamController extends Controller
             'team_id' => 'required|exists:teams,id',
             'roleInTeam' => ['required', Rule::in(['product_owner', 'scrum_master', 'developer'])],
         ]);
-
+        //tạo hai biến team và userToAdd để lưu team và user được chọn từ form
         $team = Teams::findOrFail($validated['team_id']);
         $userToAdd = User::findOrFail($validated['user_id']);
 
         // Dùng Gate để kiểm tra người dùng hiện tại có quyền quản lý team này không
         $this->authorize('manage-team-members', $team);
+
+        //dùng in_array để kiểm tra role cho gọn trách câu lệnh dài.
+        //hàm này để check một team chỉ có một PO và một SM
         if (in_array($validated['roleInTeam'], ['product_owner', 'scrum_master'])) {
             $roleExists = $team->users()->where('roleInTeam', $validated['roleInTeam'])->exists();
             if ($roleExists) {
@@ -84,7 +87,7 @@ class TeamController extends Controller
         if (Auth::id() === $user->id) {
             return back()->with('error', 'You cannot remove yourself from the team.');
         }
-
+        //detach là một hàm của Eloquent để xóa bản ghi này, có thể truy vấn DB để dùng delete nhưng cách detach gọn hơn
         $team->users()->detach($user->id);
 
         return back()->with('success', 'Member removed successfully.');
@@ -103,8 +106,9 @@ class TeamController extends Controller
         $validated = $request->validate([
             'roleInTeam' => ['required', Rule::in(['product_owner', 'scrum_master', 'developer'])],
         ]);
-
+        //biến newRole này sẽ lưu vai trò sau khi được validated
         $newRole = $validated['roleInTeam'];
+        //lấy ra các user trong team theo id và lấy vai trò hiện tại của họ
         $currentRole = $team->users()->find($member->id)->pivot->roleInTeam;
         // Ngăn chặn việc thay đổi vai trò của Scrum Master cuối cùng
         if ($currentRole === 'scrum_master' && $newRole !== 'scrum_master') {
@@ -116,12 +120,12 @@ class TeamController extends Controller
                 return back()->with('error', 'Cannot change role. This is the last Scrum Master in the team. Please assign the SM role to another member first.');
             }
         }
-        // 3. LOGIC MỚI: Ngăn chặn việc "hạ cấp" trực tiếp Product Owner
+        // nếu người hiện tại là PO mà người khác muốn hạ cấp họ thì chặn lại
         if ($currentRole === 'product_owner' && $newRole !== 'product_owner') {
             return back()->with('error', 'You must transfer the Product Owner role to another user before changing this member\'s role.');
         }
 
-        // 4. LOGIC MỚI: Xử lý việc "chuyển giao" vai trò Product Owner
+        // Xử lý việc "chuyển giao" vai trò Product Owner. Nếu người hiện tại được giao role là PO thì sẽ tự động hạ cấp PO cũ
         if ($newRole === 'product_owner' && $currentRole !== 'product_owner') {
             // Tìm PO cũ trong team
             $oldPO = $team->users()->where('roleInTeam', 'product_owner')->first();
@@ -140,7 +144,7 @@ class TeamController extends Controller
         }
 
 
-        // 5. Tiến hành cập nhật vai trò cho thành viên được chọn
+        // 5. Tiến hành cập nhật vai trò cho thành viên được chọn, updateExistingPivot là hàm của Eloquent để cập nhật bảng trung gian
         $team->users()->updateExistingPivot($member->id, ['roleInTeam' => $newRole]);
 
         return back()->with('success', 'Member role updated successfully.');
