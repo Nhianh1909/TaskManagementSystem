@@ -203,7 +203,10 @@
         // Initialize app
         document.addEventListener('DOMContentLoaded', function() {
             createParticles();
-            showPage('homepage');
+            // call showPage only if defined (some pages don't include the definition)
+            if (typeof showPage === 'function') {
+                showPage('homepage');
+            }
 
             // Load dark mode preference
             if (localStorage.getItem('darkMode') === 'true') {
@@ -222,6 +225,6 @@
 
     </script>
      @stack('scripts')
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'96a2af5b32ef0655',t:'MTc1NDM1OTA2MC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</body>
 
 
