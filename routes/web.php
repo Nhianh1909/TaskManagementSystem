@@ -6,6 +6,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\TasksController;
 use App\Http\Controllers\SprintsController;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\TestController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
@@ -138,3 +139,7 @@ Route::get('/test-members', function() {
 
 
 })->middleware('auth'); // Bắt buộc phải đăng nhập để chạy test
+
+
+//Test relationship model
+Route::get('/testRelationship', [TestController::class, 'testRelationship']);
