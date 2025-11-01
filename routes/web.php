@@ -63,6 +63,8 @@ Route::middleware('auth')->group(function () {
     // Other Routes
     Route::get('/reports', [ReportController::class, 'index'])->name('reports');
     Route::view('/settings', 'pages.settings')->name('settings');
+    // Product Backlog (UI demo)
+    Route::view('/product-backlog', 'pages.product-backlog')->name('product.backlog');
 
     // Logout Route
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
