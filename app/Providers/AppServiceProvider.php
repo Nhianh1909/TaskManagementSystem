@@ -48,5 +48,9 @@ class AppServiceProvider extends ServiceProvider
                     ->whereIn('roleInTeam', ['product_owner', 'scrum_master'])
                     ->exists();
         });
+        Gate::define('manage-backlog', function (User $user){
+            //dùng Gate để define xem user tỏng team có phải PO ko
+            return $user->teams()->whereIn('roleInTeam', ['product_owner'])->exists();
+        });
     }
 }

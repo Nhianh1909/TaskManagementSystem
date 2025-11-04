@@ -41,6 +41,15 @@ Route::middleware('guest')->group(function () {
 Route::middleware('auth')->group(function () {
     Route::get('/dashboard', [TasksController::class, 'index'])->name('dashboard');
 
+    //epic & user stories in product backlog
+    Route::get('/product-backlog', [TasksController::class, 'productBacklog'])->name('product.backlog');
+    Route::get('/addEpic', [TasksController::class, 'addEpic'])->name('addEpic');
+    Route::post('/epics', [TasksController::class, 'storeEpic'])->name('epics.store');
+    Route::patch('/epics/{epic}', [TasksController::class, 'updateEpic'])->name('epics.update');
+    Route::delete('/epics/{epic}', [TasksController::class, 'destroyEpic'])->name('epics.destroy');
+    Route::post('/user-stories', [TasksController::class, 'storeUserStory'])->name('user-stories.store');
+    Route::patch('/user-stories/{task}', [TasksController::class, 'updateUserStory'])->name('user-stories.update');
+    Route::delete('/user-stories/{task}', [TasksController::class, 'destroyUserStory'])->name('user-stories.destroy');
     // Task Routes
     Route::get('/tasksboard', [TasksController::class, 'taskBoard'])->name('tasksboard');
     Route::post('/tasks', [TasksController::class, 'store'])->name('tasks.store');
@@ -64,13 +73,13 @@ Route::middleware('auth')->group(function () {
     Route::get('/reports', [ReportController::class, 'index'])->name('reports');
     Route::view('/settings', 'pages.settings')->name('settings');
     // Product Backlog (UI demo)
-    Route::view('/product-backlog', 'pages.product-backlog')->name('product.backlog');
+    // Route::view('/product-backlog', 'pages.product-backlog')->name('product.backlog');
 
     // Logout Route
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 });
 
-//middleware dành cho AI
+// //middleware dành cho AI
 Route::middleware('auth')->group(function () {
     // ... các route cũ của bạn
 
@@ -109,38 +118,38 @@ Route::get('/fix-my-account', function() {
     return 'Thành công! Tài khoản "' . $user->name . '" của bạn đã được gán quyền Product Owner cho team "' . $team->name . '". Hãy quay lại trang Team Management để kiểm tra.';
 });
 
-// ===== ROUTE TEST TẠM THỜI (NHỚ XÓA SAU KHI XONG) =====
-Route::get('/test-members', function() {
+// // ===== ROUTE TEST TẠM THỜI (NHỚ XÓA SAU KHI XONG) =====
+// Route::get('/test-members', function() {
 
-    // 1. Lấy user và team (giống như trong hàm AI)
-    $user = Auth::user();
-    if (!$user) {
-        return 'Bạn cần đăng nhập trước.';
-    }
+//     // 1. Lấy user và team (giống như trong hàm AI)
+//     $user = Auth::user();
+//     if (!$user) {
+//         return 'Bạn cần đăng nhập trước.';
+//     }
 
-    // Lấy team của user.
-    // Lưu ý: tệp TasksController dùng $user->team(),
-    // nhưng model User.php lại định nghĩa là teams() (số nhiều).
-    // Chúng ta sẽ dùng .teams()->first() cho chắc chắn.
-    $team = $user->teams()->first();
+//     // Lấy team của user.
+//     // Lưu ý: tệp TasksController dùng $user->team(),
+//     // nhưng model User.php lại định nghĩa là teams() (số nhiều).
+//     // Chúng ta sẽ dùng .teams()->first() cho chắc chắn.
+//     $team = $user->teams()->first();
 
-    if (!$team) {
-        return 'User này không thuộc team nào.';
-    }
+//     if (!$team) {
+//         return 'User này không thuộc team nào.';
+//     }
 
-    echo "Đang test với team: " . $team->name . "<br>";
+//     echo "Đang test với team: " . $team->name . "<br>";
 
-    // 2. Chạy chính xác đoạn query bạn muốn test
-    $teamMembers = $team->users()
-        ->where('roleInTeam', 'developer') // Chỉ tìm developer
-        ->withCount(['tasks as total_story_points' => function ($query) {
-            $query->select(DB::raw('sum(storyPoints)')); // Tính tổng story points
-        }])
-        ->get();
+//     // 2. Chạy chính xác đoạn query bạn muốn test
+//     $teamMembers = $team->users()
+//         ->where('roleInTeam', 'developer') // Chỉ tìm developer
+//         ->withCount(['tasks as total_story_points' => function ($query) {
+//             $query->select(DB::raw('sum(storyPoints)')); // Tính tổng story points
+//         }])
+//         ->get();
 
 
 
-})->middleware('auth'); // Bắt buộc phải đăng nhập để chạy test
+// })->middleware('auth'); // Bắt buộc phải đăng nhập để chạy test
 
 
 //Test relationship model

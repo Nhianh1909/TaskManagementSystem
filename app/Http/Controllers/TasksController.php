@@ -6,6 +6,8 @@ use Illuminate\Support\Facades\DB;
 use App\Models\Sprints;
 use App\Models\Tasks;
 use App\Models\User;
+use App\Models\Epics;
+
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
@@ -65,6 +67,228 @@ class TasksController extends Controller
             'recentActivities',
             'sprintProgress'
         ));
+    }
+    /**
+     * Hiển thị trang Product Backlog
+     */
+    public function productBacklog()
+    {
+        $user = Auth::user();
+        $team = $user->teams()->first();
+        if(!$team ) {
+            return redirect()->route('dashboard')->with('error', 'You must be part of a team to view the product backlog.');
+        }
+        //lấy ra các epic thuộc về $team mà sau khi đã lấy ra team đó
+        $getEpics = $team->epics()
+                  ->with('userStories')
+                  ->get();
+        $tasksWithoutEpic = Tasks::whereNull('parent_id') // 1. Chỉ lấy User Story (task cha)
+                         ->whereNull('epic_id')      // 2. Chưa thuộc Epic nào
+                         ->whereNull('sprint_id')    // 3. Nằm trong backlog (chưa vào sprint)
+                         ->with('assignee')        // Tải kèm thông tin người được gán (nếu có)
+                         ->orderBy('priority')     // Sắp xếp theo độ ưu tiên
+                         ->get();
+
+        return view('pages.product-backlog', compact('getEpics', 'tasksWithoutEpic', 'team'));
+    }
+    /**
+     * add a new Epic.
+     */
+    public function storeEpic(Request $request)
+    {
+        //Kiểm tra quyền
+        $user = Auth::user();
+        $team = $user->teams()->first();
+        $userRoleInTeam = $team->users()->find($user->id)?->pivot->roleInTeam;
+
+        // Nếu KHÔNG phải Product Owner → từ chối
+        if ($userRoleInTeam !== 'product_owner') {
+            return response()->json([
+                'message' => 'Bạn không có quyền tạo Epic.'
+            ], 403);  // 403 = Forbidden (Cấm)
+        }
+        // ===== 2. VALIDATE DỮ LIỆU =====
+        $validated = $request->validate([
+            'title' => 'required|string|max:255',  // Bắt buộc, tối đa 255 ký tự
+            'description' => 'nullable|string',    // Tùy chọn
+        ]);
+        $epic = Epics::create([
+            'team_id' => $team->id,
+            'title' => $validated['title'],
+            'description' => $validated['description'] ?? '',
+        ]);
+
+         // ===== 4. TRẢ VỀ KẾT QUẢ CHO JAVASCRIPT =====
+        return response()->json([
+            'message' => 'Tạo Epic thành công!',
+            'epic' => $epic  // Trả về Epic vừa tạo (có id, title, description...)
+        ], 201);  // 201 = Created (Đã tạo)
+    }
+
+    /**
+     * Update an existing Epic.
+     */
+    public function updateEpic(Request $request, Epics $epic)
+    {
+        // Kiểm tra quyền
+        $user = Auth::user();
+        $team = $user->teams()->first();
+        $userRoleInTeam = $team ? $team->users()->find($user->id)?->pivot->roleInTeam : null;
+
+        // Chỉ Product Owner mới được sửa Epic
+        if ($userRoleInTeam !== 'product_owner') {
+            return response()->json([
+                'message' => 'Bạn không có quyền sửa Epic.'
+            ], 403);
+        }
+
+        // Validate dữ liệu
+        $validated = $request->validate([
+            'title' => 'required|string|max:255',
+            'description' => 'nullable|string',
+        ]);
+
+        // Cập nhật Epic
+        $epic->update($validated);
+
+        return response()->json([
+            'message' => 'Epic updated successfully!',
+            'epic' => $epic
+        ]);
+    }
+
+    /**
+     * Delete an Epic.
+     */
+    public function destroyEpic(Epics $epic)
+    {
+        // Kiểm tra quyền
+        $user = Auth::user();
+        $team = $user->teams()->first();
+        $userRoleInTeam = $team ? $team->users()->find($user->id)?->pivot->roleInTeam : null;
+
+        // Chỉ Product Owner mới được xóa Epic
+        if ($userRoleInTeam !== 'product_owner') {
+            return response()->json([
+                'message' => 'Bạn không có quyền xóa Epic.'
+            ], 403);
+        }
+
+        // Xóa Epic
+        $epic->delete();
+
+        return response()->json([
+            'message' => 'Epic deleted successfully!'
+        ]);
+    }
+
+    /**
+     * add a new User Story.
+     */
+    public function storeUserStory(Request $request)
+    {
+        // Kiểm tra quyền
+        $user = Auth::user();
+        $team = $user->teams()->first();
+        $userRoleInTeam = $team ? $team->users()->find($user->id)?->pivot->roleInTeam : null;
+
+        // Chỉ Product Owner mới được tạo User Story
+        if ($userRoleInTeam !== 'product_owner') {
+            return response()->json([
+                'message' => 'Bạn không có quyền tạo User Story.'
+            ], 403);
+        }
+
+        // Validate dữ liệu
+        $validated = $request->validate([
+            'title' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'status' => ['required', Rule::in(['toDo', 'inProgress', 'done'])],
+            'storyPoints' => 'nullable|integer|min:0',
+            'priority' => ['required', Rule::in(['low', 'medium', 'high'])],
+            'assigned_to' => 'nullable|exists:users,id',
+            'epic_id' => 'required|exists:epics,id',
+        ]);
+
+        // Tạo User Story (Task với parent_id = null)
+        $userStory = Tasks::create([
+            'title' => $validated['title'],
+            'description' => $validated['description'] ?? '',
+            'status' => $validated['status'],
+            'storyPoints' => $validated['storyPoints'],
+            'priority' => $validated['priority'],
+            'assigned_to' => $validated['assigned_to'],
+            'epic_id' => $validated['epic_id'],
+            'created_by' => Auth::id(),
+            'sprint_id' => null, // Mặc định chưa thuộc sprint nào
+            'parent_id' => null, // Đây là User Story (task cha)
+        ]);
+
+        return response()->json([
+            'message' => 'Tạo User Story thành công!',
+            'story' => $userStory->load('assignee', 'epic')
+        ], 201);
+    }
+
+    /**
+     * Update an existing User Story.
+     */
+    public function updateUserStory(Request $request, Tasks $task)
+    {
+        // Kiểm tra quyền
+        $user = Auth::user();
+        $team = $user->teams()->first();
+        $userRoleInTeam = $team ? $team->users()->find($user->id)?->pivot->roleInTeam : null;
+
+        // Chỉ Product Owner mới được sửa User Story
+        if ($userRoleInTeam !== 'product_owner') {
+            return response()->json([
+                'message' => 'Bạn không có quyền sửa User Story.'
+            ], 403);
+        }
+
+        // Validate dữ liệu
+        $validated = $request->validate([
+            'title' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'status' => ['required', Rule::in(['toDo', 'inProgress', 'done'])],
+            'storyPoints' => 'nullable|integer|min:0',
+            'priority' => ['required', Rule::in(['low', 'medium', 'high'])],
+            'assigned_to' => 'nullable|exists:users,id',
+        ]);
+
+        // Cập nhật User Story
+        $task->update($validated);
+
+        return response()->json([
+            'message' => 'User Story updated successfully!',
+            'story' => $task->load('assignee', 'epic')
+        ]);
+    }
+
+    /**
+     * Delete a User Story.
+     */
+    public function destroyUserStory(Tasks $task)
+    {
+        // Kiểm tra quyền
+        $user = Auth::user();
+        $team = $user->teams()->first();
+        $userRoleInTeam = $team ? $team->users()->find($user->id)?->pivot->roleInTeam : null;
+
+        // Chỉ Product Owner mới được xóa User Story
+        if ($userRoleInTeam !== 'product_owner') {
+            return response()->json([
+                'message' => 'Bạn không có quyền xóa User Story.'
+            ], 403);
+        }
+
+        // Xóa User Story
+        $task->delete();
+
+        return response()->json([
+            'message' => 'User Story deleted successfully!'
+        ]);
     }
 
     /**

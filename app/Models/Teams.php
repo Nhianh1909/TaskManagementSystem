@@ -35,4 +35,11 @@ class Teams extends Model
     {
         return $this->hasOne(Sprints::class, 'team_id')->where('is_active', true);
     }
+    /**
+     * Mối quan hệ một-nhiều: Một Team có nhiều Epic.
+     */
+    public function epics()
+    {
+        return $this->hasMany(Epics::class, 'team_id');
+    }
 }
