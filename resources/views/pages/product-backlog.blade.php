@@ -257,7 +257,7 @@
                     <div class="flex items-center justify-between mb-2">
                         <div class="text-sm font-medium text-gray-700">User Stories ({{ $epic->userStories->count() }})</div>
                         {{-- BUTTON THÊM USERSTORIES SAU KHI ĐÃ TẠO EPIC CÒN TRỐNG HOẶC MUỐN TẠO THÊM USERSTORIES CHO EPIC CŨ --}}
-                        <button onclick="openCreateStoryModal({{ $epic->id }})"
+                        <button onclick="openCreateStoryModal({{ $epic->id }}, '{{ addslashes($epic->title) }}')"
                                 class="flex items-center justify-center w-6 h-6 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-lg leading-none">
                             +
                         </button>
@@ -875,9 +875,9 @@
     // --- 2B. CREATE USER STORY MODAL FUNCTIONS ---
     let currentEpicId = null; // Biến lưu epic_id hiện tại
     let epicTitles = {}; // Object lưu tên Epic theo ID
-
+    //truyền title bằng null để tránh lỗi epicTitles undefined
     // Mở Create User Story Modal
-    function openCreateStoryModal(epicId) {
+    function openCreateStoryModal(epicId, epicTitle = null) {
         currentEpicId = epicId;
         const modal = document.getElementById('create-story-modal');
         modal.classList.remove('hidden');
@@ -891,9 +891,10 @@
         document.getElementById('story-priority').value = 'medium';
         document.getElementById('story-assignee').value = '';
 
-        // Hiển thị tên Epic (read-only)
-        document.getElementById('story-epic-id').value = epicId;
-        document.getElementById('story-epic-display').value = epicTitles[epicId] || 'Epic #' + epicId;
+    // Hiển thị tên Epic (read-only)
+    document.getElementById('story-epic-id').value = epicId;
+    const displayTitle = epicTitle != null ? epicTitle : (epicTitles[epicId] || ('Epic #' + epicId));
+    document.getElementById('story-epic-display').value = displayTitle;
     }
 
     // Đóng Create User Story Modal
