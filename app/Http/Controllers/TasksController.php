@@ -315,13 +315,14 @@ class TasksController extends Controller
         $activeSprint = $team->sprints()->where('is_active', true)->first();
         // dd($activeSprint->toArray());
         // Lấy các task trong Product Backlog (chưa thuộc sprint nào)
-        $backlogTasks = Tasks::whereNull('sprint_id')
-                             ->with('assignee')
+    $backlogTasks = Tasks::whereNull('sprint_id')
+                 ->with('assignee')
+                 ->withCount('comments')
                              ->orderBy('created_at', 'desc')
                              ->get();
         // dd($backlogTasks->toArray());
         // Lấy các task trong sprint đang hoạt động và lấy luôn cả người được gán cho task đó, false thì tạo ra 1 collection rỗng
-        $sprintTasks = $activeSprint ? $activeSprint->tasks()->with('assignee')->get() : collect();
+    $sprintTasks = $activeSprint ? $activeSprint->tasks()->with('assignee')->withCount('comments')->get() : collect();
 
          // Lấy danh sách thành viên trong team, loại trừ vai trò 'scrum_master'
         $teamMembers = $team->users()->wherePivot('roleInTeam', '!=', 'scrum_master')->get();

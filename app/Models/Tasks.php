@@ -67,4 +67,12 @@ class Tasks extends Model
     {
         return $this->hasMany(Tasks::class, 'parent_id');
     }
+
+    /**
+     * Mối quan hệ một-nhiều: Task có nhiều comments.
+     */
+    public function comments()
+    {
+        return $this->hasMany(TasksComments::class, 'task_id');
+    }
 }

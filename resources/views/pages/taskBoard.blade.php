@@ -83,9 +83,26 @@
                                     $priorityColors = ['low' => 'green', 'medium' => 'yellow', 'high' => 'red'];
                                 @endphp
                                 <span class="text-xs font-semibold bg-{{ $priorityColors[$task->priority] }}-100 text-{{ $priorityColors[$task->priority] }}-800 px-2 py-1 rounded-full">{{ ucfirst($task->priority) }}</span>
-                                @if($task->assignee)
-                                    <img src="https://ui-avatars.com/api/?name={{ urlencode($task->assignee->name) }}&background=random&color=fff" alt="Assignee" class="w-6 h-6 rounded-full" title="Assigned to {{ $task->assignee->name }}">
-                                @endif
+                                <div class="flex items-center gap-3">
+                                    <button type="button" class="comment-toggle text-gray-500 hover:text-blue-600 flex items-center gap-1" data-task-id="{{ $task->id }}" title="Comment">
+                                        <i class="far fa-comment"></i>
+                                        <span class="comment-count text-xs bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded-full">{{ $task->comments_count ?? 0 }}</span>
+                                    </button>
+                                    @if($task->assignee)
+                                        <img src="https://ui-avatars.com/api/?name={{ urlencode($task->assignee->name) }}&background=random&color=fff" alt="Assignee" class="w-6 h-6 rounded-full" title="Assigned to {{ $task->assignee->name }}">
+                                    @endif
+                                </div>
+                            </div>
+
+                            <div class="comment-box mt-3 hidden w-full overflow-hidden" data-task-id="{{ $task->id }}">
+                                <div class="flex items-center gap-2 w-full">
+                                    <input type="text" class="comment-input w-0 flex-1 min-w-0 border border-gray-300 rounded-md px-3 py-2 text-sm" placeholder="Nhập nhận xét và nhấn Enter..." />
+                                    <button type="button" class="comment-send shrink-0 bg-blue-600 text-white px-3 py-2 rounded-md" data-task-id="{{ $task->id }}" title="Gửi">
+                                        <i class="fas fa-paper-plane"></i>
+                                    </button>
+                                </div>
+                                <div class="comments-list mt-2 space-y-2 max-h-48 overflow-y-auto text-sm text-gray-700" data-loaded="false"></div>
+                                <button type="button" class="load-more-comments hidden mt-2 text-xs text-blue-600 hover:underline" data-task-id="{{ $task->id }}">Xem thêm bình luận</button>
                             </div>
                         </div>
                     @endforeach
@@ -159,6 +176,144 @@
 
 @push('scripts')
 <script>
+    // --- COMMENT: toggle & submit logic ---
+    document.addEventListener('click', function(e) {
+        const toggleBtn = e.target.closest('.comment-toggle');
+        if (toggleBtn) {
+            const card = toggleBtn.closest('.task-card');
+            const box = card.querySelector('.comment-box');
+            const wasHidden = box.classList.contains('hidden');
+            box.classList.toggle('hidden');
+            if (wasHidden) {
+                // Load latest comments when opening
+                const list = box.querySelector('.comments-list');
+                list.dataset.loaded = 'false';
+                list.innerHTML = '';
+                box.querySelector('.load-more-comments').classList.add('hidden');
+                fetchAndRenderComments(card.getAttribute('data-task-id'), box);
+            }
+        }
+    });
+
+    async function submitComment(taskId, inputEl, card) {
+        const content = inputEl.value.trim();
+        if (!content) return;
+        const sendBtn = card.querySelector('.comment-send');
+        sendBtn.disabled = true;
+        sendBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        try {
+            const res = await fetch(`/tasks/${taskId}/comments`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify({ content })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.message || 'Không thể gửi bình luận.');
+
+            // Tăng bộ đếm
+            const countEl = card.querySelector('.comment-count');
+            const current = parseInt(countEl.textContent || '0', 10);
+            countEl.textContent = current + 1;
+            // Dọn input và ẩn box
+            inputEl.value = '';
+            card.querySelector('.comment-box').classList.add('hidden');
+        } catch (err) {
+            alert(err.message);
+        } finally {
+            sendBtn.disabled = false;
+            sendBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
+        }
+    }
+
+    document.addEventListener('click', function(e) {
+        const sendBtn = e.target.closest('.comment-send');
+        if (sendBtn) {
+            const card = sendBtn.closest('.task-card');
+            const inputEl = card.querySelector('.comment-input');
+            submitComment(sendBtn.dataset.taskId, inputEl, card);
+        }
+    });
+
+    document.addEventListener('keydown', function(e) {
+        const inputEl = e.target.closest('.comment-input');
+        if (inputEl && e.key === 'Enter') {
+            e.preventDefault();
+            const card = inputEl.closest('.task-card');
+            const taskId = card.getAttribute('data-task-id');
+            submitComment(taskId, inputEl, card);
+        }
+    });
+
+    async function fetchAndRenderComments(taskId, box, before = null) {
+        const list = box.querySelector('.comments-list');
+        const loadMoreBtn = box.querySelector('.load-more-comments');
+        try {
+            const params = new URLSearchParams();
+            params.set('limit', '10');
+            if (before) params.set('before', before);
+            const res = await fetch(`/tasks/${taskId}/comments?` + params.toString(), {
+                headers: { 'Accept': 'application/json' }
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.message || 'Không tải được bình luận.');
+
+            const items = data.data || [];
+            // Append comments (older at bottom)
+            items.forEach(c => {
+                const row = document.createElement('div');
+                row.className = 'flex items-start gap-2';
+                const initials = (c.user?.name || '?').split(' ').map(s => s[0]).join('').slice(0,2).toUpperCase();
+                row.innerHTML = `
+                    <div class="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs text-gray-600">${initials}</div>
+                    <div class="flex-1 min-w-0">
+                        <div class="text-xs text-gray-500">${escapeHtml(c.user?.name || 'Unknown')} • ${formatTime(c.created_at)}</div>
+                        <div class="whitespace-pre-wrap">${escapeHtml(c.content)}</div>
+                    </div>
+                `;
+                list.appendChild(row);
+            });
+
+            if (data.has_more && data.next_before) {
+                loadMoreBtn.classList.remove('hidden');
+                loadMoreBtn.dataset.nextBefore = data.next_before;
+            } else {
+                loadMoreBtn.classList.add('hidden');
+                loadMoreBtn.dataset.nextBefore = '';
+            }
+
+            list.dataset.loaded = 'true';
+        } catch (err) {
+            const errRow = document.createElement('div');
+            errRow.className = 'text-xs text-red-600';
+            errRow.textContent = err.message;
+            list.appendChild(errRow);
+        }
+    }
+
+    document.addEventListener('click', function(e) {
+        const btn = e.target.closest('.load-more-comments');
+        if (btn) {
+            const card = btn.closest('.task-card');
+            const box = card.querySelector('.comment-box');
+            const nextBefore = btn.dataset.nextBefore;
+            if (nextBefore) fetchAndRenderComments(card.getAttribute('data-task-id'), box, nextBefore);
+        }
+    });
+
+    function escapeHtml(str) {
+        return (str || '').replace(/[&<>"']/g, function(m) {
+            return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[m]);
+        });
+    }
+
+    function formatTime(str) {
+        try { return new Date(str).toLocaleString(); } catch { return str; }
+    }
+
     // --- DRAG AND DROP LOGIC (Đã nâng cấp) ---
     function allowDrop(ev) {
         ev.preventDefault();

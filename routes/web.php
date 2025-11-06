@@ -7,6 +7,7 @@ use App\Http\Controllers\TasksController;
 use App\Http\Controllers\SprintsController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\RetrospectiveController;
+use App\Http\Controllers\TasksCommentsController;
 use App\Http\Controllers\TestController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -58,6 +59,10 @@ Route::middleware('auth')->group(function () {
     Route::patch('/tasks/{task}', [TasksController::class, 'update'])->name('tasks.update');
     Route::delete('/tasks/{task}', [TasksController::class, 'destroy'])->name('tasks.destroy');
     Route::patch('/tasks/{task}/status', [TasksController::class, 'updateStatus'])->name('tasks.updateStatus');
+
+    // Task Comments
+    Route::get('/tasks/{task}/comments', [TasksCommentsController::class, 'index'])->name('tasks.comments.index');
+    Route::post('/tasks/{task}/comments', [TasksCommentsController::class, 'store'])->name('tasks.comments.store');
 
     // Sprint Routes
     Route::get('/sprint/planning', [SprintsController::class, 'create'])->name('sprint.create');
