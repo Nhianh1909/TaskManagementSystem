@@ -6,6 +6,8 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\TasksController;
 use App\Http\Controllers\SprintsController;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\RetrospectiveController;
+use App\Http\Controllers\TasksCommentsController;
 use App\Http\Controllers\TestController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -68,6 +70,10 @@ Route::middleware('auth')->group(function () {
     Route::delete('/tasks/{task}', [TasksController::class, 'destroy'])->name('tasks.destroy');
     Route::patch('/tasks/{task}/status', [TasksController::class, 'updateStatus'])->name('tasks.updateStatus');
 
+    // Task Comments
+    Route::get('/tasks/{task}/comments', [TasksCommentsController::class, 'index'])->name('tasks.comments.index');
+    Route::post('/tasks/{task}/comments', [TasksCommentsController::class, 'store'])->name('tasks.comments.store');
+
     // Sprint Routes
     Route::get('/sprint/planning', [SprintsController::class, 'create'])->name('sprint.create');
     Route::post('/sprint', [SprintsController::class, 'store'])->name('sprint.store');
@@ -84,6 +90,14 @@ Route::middleware('auth')->group(function () {
     Route::view('/settings', 'pages.settings')->name('settings');
     // Product Backlog (UI demo)
     // Route::view('/product-backlog', 'pages.product-backlog')->name('product.backlog');
+
+    // Retrospective Routes
+    Route::get('/retrospective', [RetrospectiveController::class, 'index'])->name('retrospective');
+    Route::post('/retrospective/items', [RetrospectiveController::class, 'storeItem'])->name('retrospective.items.store');
+    Route::patch('/retrospective/items/{id}', [RetrospectiveController::class, 'updateItem'])->name('retrospective.items.update');
+    Route::delete('/retrospective/items/{id}', [RetrospectiveController::class, 'deleteItem'])->name('retrospective.items.delete');
+    Route::post('/retrospective/items/{id}/backlog', [RetrospectiveController::class, 'addToBacklog'])->name('retrospective.items.backlog');
+    Route::post('/retrospective/end', [RetrospectiveController::class, 'endMeeting'])->name('retrospective.end');
 
     // Logout Route
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');

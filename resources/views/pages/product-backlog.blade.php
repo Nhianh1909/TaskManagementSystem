@@ -10,7 +10,7 @@
         transition: all 0.3s ease;
         box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3) !important;
     }
-    
+
     /* Fade out animation */
     .story-item {
         transition: background-color 0.5s ease, border 0.5s ease, box-shadow 0.5s ease;
@@ -294,7 +294,9 @@
     //================================================================================== --}}
     <!-- Detail Panel cho từng Epic  -->
     @foreach($getEpics as $epic)
+
         @include('pages.product-backlog.partials.epic-detail-panel', ['epic' => $epic])
+
     @endforeach
 
     <!--
@@ -339,7 +341,10 @@
 </div>
 
 @push('scripts')
+
 @include('pages.product-backlog.partials.scripts')
+
+
 @endpush
 
 @endsection
