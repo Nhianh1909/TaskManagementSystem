@@ -80,7 +80,9 @@ class TasksController extends Controller
         }
         //lấy ra các epic thuộc về $team mà sau khi đã lấy ra team đó
         $getEpics = $team->epics()
-                  ->with('userStories')
+                  ->with(['userStories' => function($query) {
+                      $query->orderBy('order_index', 'asc');
+                  }])
                   ->get();
         $tasksWithoutEpic = Tasks::whereNull('parent_id') // 1. Chỉ lấy User Story (task cha)
                          ->whereNull('epic_id')      // 2. Chưa thuộc Epic nào
@@ -88,9 +90,253 @@ class TasksController extends Controller
                          ->with('assignee')        // Tải kèm thông tin người được gán (nếu có)
                          ->orderBy('priority')     // Sắp xếp theo độ ưu tiên
                          ->get();
+        $futureSprints = $team->sprints()
+                         ->where('status', 'planning')
+                         ->where('is_active', false)
+                         ->with(['tasks' => function($query) {
+                             $query->orderBy('order_index', 'asc');
+                         }])
+                         ->orderBy('created_at', 'desc')
+                         ->get();
 
-        return view('pages.product-backlog', compact('getEpics', 'tasksWithoutEpic', 'team'));
+        return view('pages.product-backlog', compact('getEpics', 'tasksWithoutEpic', 'team', 'futureSprints'));
     }
+    // FEATURE: Future Sprint Management
+
+    public function storeFutureSprint(Request $request)
+    {
+        $user = Auth::user();
+        $team = $user->teams()->first();
+        $userRoleInTeam = $team->users()->find($user->id)?->pivot->roleInTeam;
+
+        // Check quyền: Product Owner HOẶC Scrum Master
+        if (!in_array($userRoleInTeam, ['product_owner', 'scrum_master'])) {
+            return response()->json([
+                'message' => 'Bạn không có quyền tạo Future Sprint. Chỉ Product Owner hoặc Scrum Master mới được phép.'
+            ], 403);
+        }
+
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'goal' => 'nullable|string',
+            'start_date' => 'nullable|date|after_or_equal:today',
+            'end_date' => 'nullable|date|after_or_equal:start_date',
+        ]);
+
+        $futureSprint = $team->sprints()->create([
+            'name' => $validated['name'],
+            'goal' => $validated['goal'] ?? null,
+            'start_date' => $validated['start_date'] ?? null,
+            'end_date' => $validated['end_date'] ?? null,
+            'is_active' => false,
+            'status' => 'planning',
+        ]);
+
+        return response()->json([
+            'message' => 'Tạo Future Sprint thành công!',
+            'sprint' => $futureSprint
+        ], 201);
+    }
+
+    //Gán 1 user story vào future sprint
+    public function assignFutureSprint(Request $request, Tasks $task){
+        $user = Auth::user();
+        $team = $user->teams()->first();
+        $userRoleInTeam = $team->users()->find($user->id)?->pivot->roleInTeam;
+        if($userRoleInTeam !== 'product_owner'){
+            return response()->json([
+                'message'=>'Bạn không có quyền gán User Story vào Future Sprint. Chỉ Product Owner mới được phép.'
+            ], 403);
+        }
+        $validated = $request->validate([
+            'sprint_id'=>'required|exists:sprints,id',
+        ]);
+
+        //sprint phải thuộc team, đang planing và ko active
+        $sprint = Sprints::where('id', $validated['sprint_id'])
+                ->where('team_id', $team->id)
+                ->where('status', 'planning')
+                ->where('is_active', false)
+                ->first();
+        if(!$sprint){
+            return response()->json([
+                'message'=>'Sprint không hợp lệ, không phải planning và ko thuộc team'
+            ], 422);
+        }
+        
+        // Đảm bảo story thuộc cùng team: nếu có epic thì check team theo epic
+        if($task->epic_id){
+            $epic = Epics::find($task->epic_id);
+            if(!$epic || $epic->team_id !== $team->id){
+                return response()->json([
+                    'message'=>'User Story không thuộc team của bạn.'
+                ], 422);
+            }
+        }
+        
+        // Nếu story đã nằm trong sprint này rồi thì không làm gì
+        if($task->sprint_id === $sprint->id){
+            return response()->json([
+                'message'=>'User Story đã nằm trong Sprint này rồi.',
+                'story'=>$task,
+            ]);
+        }
+        
+        //Set order_index = max + 1 trong sprint
+        $maxOrder = Tasks::where('sprint_id', $sprint->id)->max('order_index');
+        $nextOrder = is_null($maxOrder) ? 1 : $maxOrder + 1;
+        $task->update([
+            'sprint_id'=>$sprint->id,
+            'order_index'=>$nextOrder,
+        ]);
+        return response()->json([
+            'message'=>'Gán User Story vào Future Sprint thành công!',
+            'story'=>$task,
+        ]);
+    }
+        //REORDER stories trong cùng 1 epic hoặc cùng 1 sprint
+        public function reorderUserStories(Request $request){
+            $user = Auth::user();
+            $team = $user->teams()->first();
+            $userRoleInTeam = $team->users()->find($user->id)?->pivot->roleInTeam;
+            if($userRoleInTeam !== 'product_owner'){
+                return response()->json([
+                    'message'=>'Bạn không có quyền sắp xếp lại User Stories. Chỉ Product Owner mới được phép.'
+                ], 403);
+            }
+            $data = $request->validate([
+                'scope'    => ['required', Rule::in(['epic', 'sprint'])],
+                'scope_id' => 'required|integer',
+                'ids'      => 'required|array|min:1',
+                'ids.*'    => 'integer|exists:tasks,id',
+            ]);
+            
+            // Xác thực scope thuộc team của user
+            if($data['scope'] === 'sprint'){
+                $sprint = Sprints::where('id', $data['scope_id'])
+                    ->where('team_id', $team->id)
+                    ->first();
+                if(!$sprint){
+                    return response()->json([
+                        'message'=>'Sprint không hợp lệ hoặc không thuộc team của bạn.'
+                    ], 422);
+                }
+            } else if($data['scope'] === 'epic'){
+                $epic = Epics::where('id', $data['scope_id'])
+                    ->where('team_id', $team->id)
+                    ->first();
+                if (!$epic) {
+                    return response()->json(['message' => 'Epic không thuộc team.'], 403);
+                }
+            }
+
+            // Kiểm tra tất cả task đều thuộc đúng scope
+            $tasks = Tasks::whereIn('id', $data['ids']);
+            if($data['scope'] === 'sprint'){
+                $tasks->where('sprint_id', $data['scope_id']);
+            } else {
+                $tasks->where('epic_id', $data['scope_id']);
+            }
+            
+            if($tasks->count() !== count($data['ids'])){
+                return response()->json([
+                    'message' => 'Một hoặc nhiều User Story không thuộc đúng Epic/Sprint này.'
+                ], 422);
+            }
+
+            DB::transaction(function () use ($data) {
+                foreach ($data['ids'] as $index => $taskId) {
+                    $update = ['order_index' => $index + 1];
+                    if ($data['scope'] === 'sprint') {
+                        // đảm bảo task nằm đúng scope
+                        Tasks::where('id', $taskId)->where('sprint_id', $data['scope_id'])->update($update);
+                    } else {
+                        Tasks::where('id', $taskId)->where('epic_id', $data['scope_id'])->update($update);
+                    }
+                }
+            });
+
+            return response()->json(['message' => 'Cập nhật thứ tự thành công!']);
+        }
+        //UPDATE Future Sprint
+
+        public function updateFutureSprint(Request $request, Sprints $sprint)
+        {
+            $user = Auth::user();
+            $team = $user->teams()->first();
+            $userRoleInTeam = $team->users()->find($user->id)?->pivot->roleInTeam;
+
+            // 1. Check quyền
+            if (!in_array($userRoleInTeam, ['product_owner', 'scrum_master'])) {
+                return response()->json([
+                    'message' => 'Bạn không có quyền sửa Future Sprint. Chỉ Product Owner hoặc Scrum Master mới được phép.'
+                ], 403);
+            }
+
+            // 2. ✅ THÊM: Check chỉ cho sửa Planning Sprint
+            if ($sprint->is_active === true || $sprint->status !== 'planning') {
+                return response()->json([
+                    'message' => 'Không thể sửa Sprint đang hoạt động hoặc đã hoàn thành. Chỉ có thể sửa Future Sprint (Planning).'
+                ], 422);
+            }
+
+            // 3. Validate
+            $validated = $request->validate([
+                'name' => 'required|string|max:255',
+                'goal' => 'nullable|string',
+                'start_date' => 'nullable|date|after_or_equal:today',
+                'end_date' => 'nullable|date|after_or_equal:start_date',
+            ]);
+
+            // 4. Update
+            $sprint->update([
+                'name' => $validated['name'],
+                'goal' => $validated['goal'] ?? null,
+                'start_date' => $validated['start_date'] ?? null,
+                'end_date' => $validated['end_date'] ?? null,
+            ]);
+
+            // 5. Return response
+            return response()->json([
+                'message' => 'Cập nhật Future Sprint thành công!',
+                'sprint' => $sprint  // ← Trả về model đã update
+            ]);
+        }
+        public function destroyFutureSprint(Sprints $sprint){
+            $user = Auth::user();
+            $team = $user->teams()->first();
+            $userRoleInTeam = $team->users()->find($user->id)?->pivot->roleInTeam;
+            if(!in_array($userRoleInTeam, ['product_owner', 'scrum_master'])) {
+                return response()->json([
+                    'message' => 'Bạn không có quyền xóa Future Sprint. Chỉ Product Owner hoặc Scrum Master mới được phép.'
+                ], 403);
+            }
+           //check ko cho xóa Active sprint
+           if($sprint->is_active === true){
+                return response()->json([
+                    'message' => 'Không thể xóa Sprint đang hoạt động.'
+                ], 422);
+           }
+           // 3. Xử lý User Stories trong Sprint: Đưa về backlog (set sprint_id = NULL)
+            $sprint->tasks()->update([
+                'sprint_id' => null
+            ]);
+            // 4. Xóa Sprint
+            $sprint->delete();
+
+            return response()->json([
+                'message' => 'Xóa Future Sprint thành công.'
+            ]);
+        }
+
+
+
+
+
+
+
+
+
     /**
      * add a new Epic.
      */
@@ -210,6 +456,10 @@ class TasksController extends Controller
             'epic_id' => 'required|exists:epics,id',
         ]);
 
+        // Tính order_index mới cho epic
+        $maxOrder = Tasks::where('epic_id', $validated['epic_id'])->max('order_index');
+        $nextOrder = is_null($maxOrder) ? 1 : $maxOrder + 1;
+
         // Tạo User Story (Task với parent_id = null)
         $userStory = Tasks::create([
             'title' => $validated['title'],
@@ -222,6 +472,7 @@ class TasksController extends Controller
             'created_by' => Auth::id(),
             'sprint_id' => null, // Mặc định chưa thuộc sprint nào
             'parent_id' => null, // Đây là User Story (task cha)
+            'order_index' => $nextOrder,
         ]);
 
         return response()->json([

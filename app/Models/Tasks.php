@@ -19,6 +19,7 @@ class Tasks extends Model
         'epic_id',
         'parent_id',
         'status',
+        'order_index',
     ];
 
     /**

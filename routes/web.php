@@ -41,13 +41,23 @@ Route::middleware('guest')->group(function () {
 Route::middleware('auth')->group(function () {
     Route::get('/dashboard', [TasksController::class, 'index'])->name('dashboard');
 
+
     //epic & user stories in product backlog
     Route::get('/product-backlog', [TasksController::class, 'productBacklog'])->name('product.backlog');
+    //future sprint routes
+    Route::post('/future-sprints', [TasksController::class, 'storeFutureSprint'])->name('future-sprints.store');
+    Route::patch('/future-sprints/{sprint}', [TasksController::class, 'updateFutureSprint'])->name('future-sprints.update');
+    Route::delete('/future-sprints/{sprint}', [TasksController::class, 'destroyFutureSprint'])->name('future-sprints.destroy');
+
+    //epic & user stories in product backlog
     Route::get('/addEpic', [TasksController::class, 'addEpic'])->name('addEpic');
     Route::post('/epics', [TasksController::class, 'storeEpic'])->name('epics.store');
     Route::patch('/epics/{epic}', [TasksController::class, 'updateEpic'])->name('epics.update');
     Route::delete('/epics/{epic}', [TasksController::class, 'destroyEpic'])->name('epics.destroy');
     Route::post('/user-stories', [TasksController::class, 'storeUserStory'])->name('user-stories.store');
+    //drag and drop to reorder user stories - PHẢI ĐẶT TRƯỚC {task} routes
+    Route::patch('/user-stories/reorder', [TasksController::class, 'reorderUserStories'])->name('user-stories.reorder');
+    Route::patch('/user-stories/{task}/assign-future-sprint', [TasksController::class, 'assignFutureSprint'])->name('user-stories.assignFutureSprint');
     Route::patch('/user-stories/{task}', [TasksController::class, 'updateUserStory'])->name('user-stories.update');
     Route::delete('/user-stories/{task}', [TasksController::class, 'destroyUserStory'])->name('user-stories.destroy');
     // Task Routes
