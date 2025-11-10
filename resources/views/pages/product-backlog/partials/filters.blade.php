@@ -1,4 +1,4 @@
-<aside class="col-span-3 bg-white rounded-lg p-4 shadow">
+{{-- <aside class="col-span-3 bg-white rounded-lg p-4 shadow">
                 <h2 class="font-medium text-gray-700 mb-3">Filters</h2>
 
                 <div class="space-y-4">
@@ -45,4 +45,4 @@
                         </div>
                     </div>
                 </div>
-            </aside>
+            </aside> --}}

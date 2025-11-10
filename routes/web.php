@@ -62,6 +62,13 @@ Route::middleware('auth')->group(function () {
     Route::patch('/user-stories/{task}/assign-future-sprint', [TasksController::class, 'assignFutureSprint'])->name('user-stories.assignFutureSprint');
     Route::patch('/user-stories/{task}', [TasksController::class, 'updateUserStory'])->name('user-stories.update');
     Route::delete('/user-stories/{task}', [TasksController::class, 'destroyUserStory'])->name('user-stories.destroy');
+    
+    // User Story Comments Routes
+    Route::get('/user-stories/{task}/comments', [TasksCommentsController::class, 'index'])->name('user-stories.comments.index');
+    Route::post('/user-stories/{task}/comments', [TasksCommentsController::class, 'store'])->name('user-stories.comments.store');
+    Route::patch('/comments/{comment}', [TasksCommentsController::class, 'update'])->name('comments.update');
+    Route::delete('/comments/{comment}', [TasksCommentsController::class, 'destroy'])->name('comments.destroy');
+    
     // Task Routes
     Route::get('/tasksboard', [TasksController::class, 'taskBoard'])->name('tasksboard');
     Route::post('/tasks', [TasksController::class, 'store'])->name('tasks.store');

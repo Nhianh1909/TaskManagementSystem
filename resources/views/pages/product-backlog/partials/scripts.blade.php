@@ -22,12 +22,92 @@
         // panel.classList.remove('flex'); // Không cần vì chỉ toggle hidden là đủ
     }
 
+    // =====================
+    // Real-time comments (Polling)
+    // =====================
+    // Lưu interval theo storyId để clear khi đóng panel/đổi story
+    const commentIntervals = {};
+    // Lưu "key" đại diện cho danh sách comments hiện tại (để tránh re-render khi không đổi)
+    const lastCommentKeys = {};
+    // Theo dõi các comment đã bị thu gọn replies
+    const collapsedCommentIds = new Set();
+
+    function computeCommentsKey(comments) {
+        if (!Array.isArray(comments) || comments.length === 0) return 'empty:0:0:0';
+
+        let totalCount = 0;
+        let newestTs = 0;
+        let newestId = 0;
+        const toTs = (d) => (d ? new Date(d).getTime() : 0);
+
+        // Đệ quy đếm tất cả comments và replies ở mọi cấp
+        function countDeep(items) {
+            if (!Array.isArray(items)) return;
+            items.forEach(item => {
+                totalCount++;
+                const ts = toTs(item.created_at);
+                if (ts > newestTs || (ts === newestTs && item.id > newestId)) {
+                    newestTs = ts;
+                    newestId = item.id;
+                }
+                if (Array.isArray(item.replies) && item.replies.length > 0) {
+                    countDeep(item.replies);
+                }
+            });
+        }
+
+        countDeep(comments);
+        // Kết hợp count + timestamp + ID để đảm bảo unique khi có comment mới
+        return `${totalCount}:${newestTs}:${newestId}`;
+    }
+
+    function startCommentsPolling(storyId, intervalMs = 3000) {
+        // Clear interval cũ nếu có
+        if (commentIntervals[storyId]) {
+            clearInterval(commentIntervals[storyId]);
+        }
+        // Tạo interval mới: chỉ re-render khi có thay đổi
+        commentIntervals[storyId] = setInterval(async () => {
+            try {
+                const res = await fetch(`/user-stories/${storyId}/comments`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                    }
+                });
+                const data = await res.json();
+                if (!res.ok) return;
+
+                const currentKey = computeCommentsKey(data.comments || []);
+                if (lastCommentKeys[storyId] !== currentKey) {
+                    const container = document.getElementById('comments-list-' + storyId);
+                    if (container) {
+                        displayComments(container, data.comments || [], storyId);
+                        lastCommentKeys[storyId] = currentKey;
+                    }
+                }
+            } catch (e) {
+                console.error('Polling comments error:', e);
+            }
+        }, intervalMs);
+    }
+
+    function stopCommentsPolling(storyId) {
+        if (commentIntervals[storyId]) {
+            clearInterval(commentIntervals[storyId]);
+            delete commentIntervals[storyId];
+        }
+    }
+
     // Mở Story Panel
     function openStoryPanel(storyId) {
         closeAllPanels(); // Đóng tất cả panel khác trước
         const panel = document.getElementById('story-panel-' + storyId);
         panel.classList.remove('hidden');
-        // panel.classList.add('flex'); // Không cần vì <aside> bên trong đã có flex sẵn
+
+        // Load comments khi mở panel + bật polling
+        loadComments(storyId).then(() => startCommentsPolling(storyId));
     }
 
     // Đóng Story Panel
@@ -35,6 +115,8 @@
         const panel = document.getElementById('story-panel-' + storyId);
         panel.classList.add('hidden');
         // panel.classList.remove('flex'); // Không cần vì chỉ toggle hidden là đủ
+        // Tắt polling khi đóng panel
+        stopCommentsPolling(storyId);
     }
 
     // Đóng tất cả panel (Epic và Story) trước khi mở một panel mới đã sử dụng trong các hàm open
@@ -93,6 +175,7 @@
         const title = document.getElementById('epic-title').value;
         const description = document.getElementById('epic-description').value;
 
+        let activeCommentsStoryId = null; // Track the active story ID
         // Validate
         if (!title.trim()) {
             alert('Please fill in the Epic title');
@@ -154,6 +237,7 @@
         modal.classList.remove('hidden');
         // modal.classList.add('flex'); // Không cần, modal content đã có flex để căn giữa
 
+            activeCommentsStoryId = storyId; // Track the active story ID
         // Reset form về trống
         document.getElementById('story-title').value = '';
         document.getElementById('story-description').value = '';
@@ -540,14 +624,14 @@
         }
     })
     // Toggle form gán sprint
-function toggleAssignSprintForm(storyId) {
+    function toggleAssignSprintForm(storyId) {
   const el = document.getElementById('assign-sprint-form-' + storyId);
   if (!el) return;
   el.classList.toggle('hidden');
 }
 
-// Gọi API để assign story vào Future Sprint
-async function assignStoryToFutureSprint(storyId) {
+    // Gọi API để assign story vào Future Sprint
+    async function assignStoryToFutureSprint(storyId) {
   const select = document.getElementById('assign-sprint-select-' + storyId);
   if (!select || !select.value) {
     alert('Please select a Future Sprint');
@@ -596,7 +680,7 @@ function dragStory(event) {
         draggedFromScope = dropZone.dataset.scope;
         draggedFromScopeId = dropZone.dataset.scopeId;
     }
-    
+
     // Hiệu ứng visual
     draggedStoryElement.style.opacity = '0.4';
     event.dataTransfer.effectAllowed = 'move';
@@ -633,10 +717,10 @@ async function dropStory(ev) {
 
     const targetScope = dropZone.dataset.scope;
     const targetScopeId = dropZone.dataset.scopeId;
-    
+
     // LƯU ELEMENT NGAY ĐẦU để dùng sau
     const movedElement = draggedStoryElement;
-    
+
     // Kiểm tra scope hợp lệ
     if (draggedFromScope !== targetScope || draggedFromScopeId !== targetScopeId) {
         alert('Cannot move stories between different Epics or Sprints. Use the + button instead.');
@@ -677,10 +761,10 @@ async function dropStory(ev) {
         }
 
         console.log('Reorder successful:', result);
-        
+
         // Reset drag state
         resetDragState();
-        
+
         // Thêm hiệu ứng highlight cho story vừa di chuyển
         highlightReorderedStory(movedElement);
 
@@ -697,15 +781,15 @@ function highlightReorderedStory(element) {
         console.log('❌ No element to highlight');
         return;
     }
-    
+
     console.log('✅ Highlighting element:', element);
     console.log('Element classes before:', element.className);
-    
+
     // Thêm class highlight
     element.classList.add('story-reordered');
-    
+
     console.log('Element classes after:', element.className);
-    
+
     // Tự động xóa highlight sau 2 giây
     setTimeout(() => {
         element.classList.remove('story-reordered');
@@ -744,5 +828,301 @@ function resetDragState() {
 document.addEventListener('dragend', function() {
     resetDragState();
 });
+
+// =================================================================================
+//*                    COMMENTS MANAGEMENT FOR USER STORIES
+// =================================================================================
+
+// Load comments khi mở Story Panel
+async function loadComments(storyId) {
+    const commentsList = document.getElementById('comments-list-' + storyId);
+
+    try {
+        const response = await fetch(`/user-stories/${storyId}/comments`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+            }
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            displayComments(commentsList, data.comments, storyId);
+            // Cập nhật key hiện tại để polling so sánh về sau
+            lastCommentKeys[storyId] = computeCommentsKey(data.comments || []);
+        } else {
+            commentsList.innerHTML = '<div class="text-red-500 text-sm">Failed to load comments.</div>';
+        }
+    } catch (error) {
+        console.error('Error loading comments:', error);
+        commentsList.innerHTML = '<div class="text-red-500 text-sm">Error loading comments.</div>';
+    }
+}
+
+// Hiển thị comments trong UI
+function displayComments(container, comments, storyId) {
+    if (!Array.isArray(comments) || comments.length === 0) {
+        container.innerHTML = '<div class="text-gray-500 text-sm text-center py-4">No comments yet. Be the first to comment!</div>';
+        return;
+    }
+    // Giữ scroll position nếu user đang đọc phía trên
+    const previousScrollTop = container.scrollTop;
+    const isAtBottom = Math.abs(container.scrollHeight - container.scrollTop - container.clientHeight) < 10;
+
+    container.innerHTML = '';
+    comments.forEach(comment => {
+        const commentDiv = createCommentElement(comment, storyId, 0);
+        container.appendChild(commentDiv);
+    });
+
+    // Nếu người dùng đang ở cuối danh sách, tự động kéo xuống để thấy reply mới
+    if (isAtBottom) {
+        container.scrollTop = container.scrollHeight;
+    } else {
+        // Giữ nguyên vị trí đọc cũ
+        container.scrollTop = previousScrollTop;
+    }
+}
+
+// Tạo HTML element cho 1 comment
+function createCommentElement(comment, storyId, level = 0) {
+    const div = document.createElement('div');
+    const baseIndent = level * 12; // tăng lùi theo level
+    div.style.marginLeft = baseIndent + 'px';
+    div.className = 'border-l-2 border-indigo-200 pl-3 py-2';
+    div.id = 'comment-' + comment.id;
+
+    // Format thời gian
+    const commentDate = new Date(comment.created_at);
+    const timeAgo = getTimeAgo(commentDate);
+    const hasReplies = Array.isArray(comment.replies) && comment.replies.length > 0;
+    const replyCount = hasReplies ? comment.replies.length : 0;
+    const isCollapsed = collapsedCommentIds.has(comment.id);
+
+    div.innerHTML = `
+        <div class="flex items-start justify-between mb-1">
+            <div class="flex items-center gap-2">
+                <span class="font-semibold text-sm text-gray-800">${comment.user.name}</span>
+                <span class="text-xs text-gray-500">${timeAgo}</span>
+            </div>
+            ${comment.user_id == {{ Auth::id() }} ? `
+                <div class="flex gap-1">
+                    <button onclick="editComment(${comment.id}, ${storyId})"
+                            class="text-xs text-blue-600 hover:text-blue-800">Edit</button>
+                    <button onclick="deleteComment(${comment.id}, ${storyId})"
+                            class="text-xs text-red-600 hover:text-red-800">Delete</button>
+                </div>
+            ` : ''}
+        </div>
+        <div class="text-sm text-gray-700 whitespace-pre-wrap" id="comment-content-${comment.id}">${comment.content}</div>
+        <div class="mt-2 flex items-center gap-3">
+            <button onclick="toggleReplyForm(${comment.id}, ${storyId})" class="text-xs text-indigo-600 hover:text-indigo-800">Reply</button>
+            ${hasReplies ? `<button id="toggle-replies-btn-${comment.id}" onclick="toggleReplies(${comment.id})" class="text-xs text-gray-600 hover:text-gray-800">${isCollapsed ? `Show replies (${replyCount})` : `Hide replies (${replyCount})`}</button>` : ''}
+        </div>
+        <div id="reply-form-${comment.id}-${storyId}" class="mt-2 hidden">
+            <form onsubmit="addReply(event, ${storyId}, ${comment.id})">
+                <textarea id="reply-input-${comment.id}-${storyId}" rows="2" placeholder="Write a reply..."
+                    class="w-full px-2 py-1 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 text-sm"></textarea>
+                <div class="flex justify-end gap-2 mt-2">
+                    <button type="button" onclick="toggleReplyForm(${comment.id}, ${storyId})" class="px-2 py-1 text-xs rounded bg-gray-200 hover:bg-gray-300">Cancel</button>
+                    <button type="submit" class="px-3 py-1 text-xs rounded bg-indigo-600 text-white hover:bg-indigo-700">Reply</button>
+                </div>
+            </form>
+        </div>
+    `;
+    // Wrapper cho replies để có thể collapse
+    if (hasReplies && level < 5) {
+        const repliesWrapper = document.createElement('div');
+        repliesWrapper.id = `replies-wrapper-${comment.id}`;
+        repliesWrapper.className = 'mt-2 space-y-2';
+        if (isCollapsed) {
+            repliesWrapper.style.display = 'none';
+        }
+        comment.replies.forEach(rep => {
+            const replyEl = createCommentElement(rep, storyId, level + 1);
+            repliesWrapper.appendChild(replyEl);
+        });
+        div.appendChild(repliesWrapper);
+    }
+    return div;
+}
+
+function toggleReplies(commentId) {
+    const wrapper = document.getElementById(`replies-wrapper-${commentId}`);
+    const btn = document.getElementById(`toggle-replies-btn-${commentId}`);
+    if (!wrapper || !btn) return;
+    const count = wrapper.children.length;
+    if (wrapper.style.display === 'none') {
+        wrapper.style.display = '';
+        collapsedCommentIds.delete(commentId);
+        btn.textContent = `Hide replies (${count})`;
+    } else {
+        wrapper.style.display = 'none';
+        collapsedCommentIds.add(commentId);
+        btn.textContent = `Show replies (${count})`;
+    }
+}
+
+// Toggle hiển thị form reply
+function toggleReplyForm(commentId, storyId) {
+    const el = document.getElementById(`reply-form-${commentId}-${storyId}`);
+    if (!el) return;
+    el.classList.toggle('hidden');
+}
+
+// Gửi reply cho một comment
+async function addReply(event, storyId, parentId) {
+    event.preventDefault();
+    const textarea = document.getElementById(`reply-input-${parentId}-${storyId}`);
+    if (!textarea) return;
+    const content = textarea.value.trim();
+    if (!content) return;
+
+    try {
+        const response = await fetch(`/user-stories/${storyId}/comments`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            },
+            body: JSON.stringify({ content, parent_id: parentId })
+        });
+        const data = await response.json();
+        if (response.ok) {
+            textarea.value = '';
+            toggleReplyForm(parentId, storyId);
+            // Refresh comments so both top-level and replies are up-to-date
+            await loadComments(storyId);
+        } else {
+            alert(data.message || 'Failed to post reply.');
+        }
+    } catch (e) {
+        console.error('Error posting reply:', e);
+        alert('Error posting reply.');
+    }
+}
+
+// Tính thời gian "time ago"
+function getTimeAgo(date) {
+    const seconds = Math.floor((new Date() - date) / 1000);
+
+    if (seconds < 60) return 'just now';
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return minutes + 'm ago';
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return hours + 'h ago';
+    const days = Math.floor(hours / 24);
+    if (days < 7) return days + 'd ago';
+
+    return date.toLocaleDateString();
+}
+
+// Post comment mới
+async function addComment(event, storyId) {
+    event.preventDefault();
+
+    const textarea = document.getElementById('comment-input-' + storyId);
+    const content = textarea.value.trim();
+
+    if (!content) return;
+
+    try {
+        const response = await fetch(`/user-stories/${storyId}/comments`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            },
+            body: JSON.stringify({ content: content })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            // Clear textarea
+            textarea.value = '';
+
+            // Reload comments
+            loadComments(storyId);
+        } else {
+            alert(data.message || 'Failed to post comment.');
+        }
+    } catch (error) {
+        console.error('Error posting comment:', error);
+        alert('Error posting comment.');
+    }
+}
+
+// Edit comment
+async function editComment(commentId, storyId) {
+    const contentDiv = document.getElementById('comment-content-' + commentId);
+    const currentContent = contentDiv.textContent;
+
+    const newContent = prompt('Edit your comment:', currentContent);
+
+    if (!newContent || newContent === currentContent) return;
+
+    try {
+        const response = await fetch(`/comments/${commentId}`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            },
+            body: JSON.stringify({ content: newContent })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            contentDiv.textContent = newContent;
+        } else {
+            alert(data.message || 'Failed to edit comment.');
+        }
+    } catch (error) {
+        console.error('Error editing comment:', error);
+        alert('Error editing comment.');
+    }
+}
+
+// Delete comment
+async function deleteComment(commentId, storyId) {
+    if (!confirm('Are you sure you want to delete this comment?')) return;
+
+    try {
+        const response = await fetch(`/comments/${commentId}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            }
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            // Remove comment from DOM
+            const commentDiv = document.getElementById('comment-' + commentId);
+            if (commentDiv) commentDiv.remove();
+
+            // Nếu không còn comment nào, hiển thị empty state
+            const commentsList = document.getElementById('comments-list-' + storyId);
+            if (commentsList.children.length === 0) {
+                commentsList.innerHTML = '<div class="text-gray-500 text-sm text-center py-4">No comments yet. Be the first to comment!</div>';
+            }
+        } else {
+            alert(data.message || 'Failed to delete comment.');
+        }
+    } catch (error) {
+        console.error('Error deleting comment:', error);
+        alert('Error deleting comment.');
+    }
+}
 
 </script>

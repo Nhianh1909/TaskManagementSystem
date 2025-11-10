@@ -33,16 +33,14 @@
         // =================================================================================
         //******************************************************************************** *
         //*
-        //*                       FILTER SIDEBAR
+        //*                       MAIN CONTENT - FULL WIDTH
         //*
         //******************************************************************************** *
         //==================================================================================
         --}}
-        <div class="grid grid-cols-12 gap-6">
-            <!-- Sidebar -->
-            @include('pages.product-backlog.partials.filters')
+        <div>
             <!-- MAIN CONTENT -->
-            <main class="col-span-6">
+            <main class="w-full">
                 <div class="space-y-4">
                     <!-- FUTURE SPRINTS SECTION -->
                     <section>
@@ -266,9 +264,6 @@
                     </section>
                 </div>
             </main>
-
-            <!-- Right spacer (for centered layout) -->
-            <div class="col-span-3"></div>
         </div>
     </div>
 

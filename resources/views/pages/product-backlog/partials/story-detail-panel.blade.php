@@ -167,5 +167,41 @@
                         </button>
                     </div>
                 </div>
+
+                {{-- COMMENTS SECTION --}}
+                <div class="mt-8 border-t pt-6">
+                    <h4 class="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                        </svg>
+                        Discussion
+                    </h4>
+
+                    {{-- Comments List --}}
+                    <div id="comments-list-{{ $story->id }}" class="space-y-4 mb-4 max-h-64 overflow-y-auto pr-1">
+                        {{-- Comments sẽ được load bằng JS --}}
+                        <div class="text-center text-gray-500 text-sm py-4">
+                            Loading comments...
+                        </div>
+                    </div>
+
+                    {{-- Add Comment Form --}}
+                    <div class="border-t pt-4">
+                        <form id="add-comment-form-{{ $story->id }}" onsubmit="addComment(event, {{ $story->id }})">
+                            <textarea id="comment-input-{{ $story->id }}"
+                                    placeholder="Add a comment..."
+                                    rows="3"
+                                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 resize-none"
+                                    required></textarea>
+                            <div class="flex justify-end gap-2 mt-2">
+                                <button type="submit"
+                                        class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm">
+                                    Post Comment
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
             </aside>
         </div>

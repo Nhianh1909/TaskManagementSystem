@@ -10,74 +10,113 @@ use App\Models\TasksComments;
 class TasksCommentsController extends Controller
 {
     /**
-     * Lưu bình luận cho 1 task.
+     * Lấy tất cả comments của một User Story
+     */
+    public function index(Tasks $task)
+    {
+        // Kiểm tra quyền - tất cả team members có thể xem comments
+        $user = Auth::user();
+        $team = $user->teams()->first();
+        
+        if (!$team) {
+            return response()->json(['message' => 'Bạn chưa thuộc team nào.'], 403);
+        }
+
+        // Load comments với user info và replies (đa cấp)
+        $comments = $task->comments()
+            ->whereNull('parent_id') // Chỉ lấy comments gốc (không phải reply)
+            ->with([
+                'user',
+                'replies.user',
+                'replies.replies.user',
+                'replies.replies.replies.user',
+            ])
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return response()->json([
+            'comments' => $comments
+        ]);
+    }
+
+    /**
+     * Thêm comment mới cho User Story
      */
     public function store(Request $request, Tasks $task)
     {
+        $user = Auth::user();
+        $team = $user->teams()->first();
+
+        // Tất cả team members có thể comment
+        if (!$team) {
+            return response()->json(['message' => 'Bạn chưa thuộc team nào.'], 403);
+        }
+
         $validated = $request->validate([
-            'content' => 'required|string|max:5000',
-            'parent_id' => 'nullable|exists:tasks_comments,id',
+            'content' => 'required|string|max:2000',
+            'parent_id' => 'nullable|exists:tasks_comments,id', // Cho reply
         ]);
 
         $comment = TasksComments::create([
             'task_id' => $task->id,
-            'user_id' => Auth::id(),
+            'user_id' => $user->id,
             'parent_id' => $validated['parent_id'] ?? null,
             'content' => $validated['content'],
         ]);
 
+        // Load lại với user info
         $comment->load('user');
 
         return response()->json([
-            'message' => 'Comment added successfully.',
-            'comment' => [
-                'id' => $comment->id,
-                'content' => $comment->content,
-                'created_at' => $comment->created_at->toDateTimeString(),
-                'user' => [
-                    'id' => $comment->user->id ?? null,
-                    'name' => $comment->user->name ?? 'Unknown',
-                ],
-            ],
+            'message' => 'Comment đã được thêm!',
+            'comment' => $comment
         ], 201);
     }
 
     /**
-     * Lấy danh sách bình luận của task (mới nhất trước), hỗ trợ cursor bằng tham số 'before'.
+     * Sửa comment của mình
      */
-    public function index(Request $request, Tasks $task)
+    public function update(Request $request, TasksComments $comment)
     {
-        $limit = (int) $request->query('limit', 10);
-        $limit = max(1, min(20, $limit));
-        $beforeId = $request->query('before');
+        $user = Auth::user();
 
-        $query = $task->comments()->with('user')->orderByDesc('id');
-        if ($beforeId) {
-            $query->where('id', '<', $beforeId);
+        // Chỉ người tạo comment mới được sửa
+        if ($comment->user_id !== $user->id) {
+            return response()->json(['message' => 'Bạn không có quyền sửa comment này.'], 403);
         }
 
-        // Lấy dư 1 để biết còn nữa không
-        $comments = $query->take($limit + 1)->get();
-        $hasMore = $comments->count() > $limit;
-        $comments = $comments->take($limit);
-        $nextBefore = $hasMore ? $comments->last()->id : null;
+        $validated = $request->validate([
+            'content' => 'required|string|max:2000',
+        ]);
 
-        $payload = $comments->map(function ($c) {
-            return [
-                'id' => $c->id,
-                'content' => $c->content,
-                'created_at' => $c->created_at->toDateTimeString(),
-                'user' => [
-                    'id' => $c->user->id ?? null,
-                    'name' => $c->user->name ?? 'Unknown',
-                ],
-            ];
-        });
+        $comment->update([
+            'content' => $validated['content'],
+        ]);
 
         return response()->json([
-            'data' => $payload,
-            'has_more' => $hasMore,
-            'next_before' => $nextBefore,
+            'message' => 'Comment đã được cập nhật!',
+            'comment' => $comment
+        ]);
+    }
+
+    /**
+     * Xóa comment của mình
+     */
+    public function destroy(TasksComments $comment)
+    {
+        $user = Auth::user();
+        $team = $user->teams()->first();
+        $userRoleInTeam = $team ? $team->users()->find($user->id)?->pivot->roleInTeam : null;
+
+        // Chỉ người tạo hoặc Product Owner/Scrum Master mới được xóa
+        if ($comment->user_id !== $user->id && !in_array($userRoleInTeam, ['product_owner', 'scrum_master'])) {
+            return response()->json(['message' => 'Bạn không có quyền xóa comment này.'], 403);
+        }
+
+        $comment->delete();
+
+        return response()->json([
+            'message' => 'Comment đã được xóa!'
         ]);
     }
 }
