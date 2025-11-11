@@ -35,38 +35,43 @@
     function computeCommentsKey(comments) {
         if (!Array.isArray(comments) || comments.length === 0) return 'empty:0:0:0';
 
-        let totalCount = 0;
-        let newestTs = 0;
-        let newestId = 0;
+        let totalCount = 0; // Đếm tổng số comment/reply
+        let newestTs = 0;   // Lưu timestamp (dạng số) mới nhất
+        let newestId = 0;   // Lưu ID mới nhất
+        //tạo ra biến toTs để chuyển ngày thành timestamp so sánh tgian cmt nào mới nhất, tính từ ngày 1/1/1970
         const toTs = (d) => (d ? new Date(d).getTime() : 0);
 
         // Đệ quy đếm tất cả comments và replies ở mọi cấp
         function countDeep(items) {
             if (!Array.isArray(items)) return;
             items.forEach(item => {
+                //cứ thấy một comment thì bộ đếm tăng có bao nhiêu cmt
                 totalCount++;
+                //tạo hàm ts để lấy cột móc thời gian của bluan đó sau đó tính tgian timestamp
                 const ts = toTs(item.created_at);
+                //lặp qua mảng comment parent nếu như ko rỗng thì xuống vòng lặp dưới để kiểm tra
                 if (ts > newestTs || (ts === newestTs && item.id > newestId)) {
                     newestTs = ts;
                     newestId = item.id;
                 }
+                //vòng lặp replies từ parent nếu có
                 if (Array.isArray(item.replies) && item.replies.length > 0) {
                     countDeep(item.replies);
                 }
             });
         }
-
+        //gọi hàm để nó chạy
         countDeep(comments);
         // Kết hợp count + timestamp + ID để đảm bảo unique khi có comment mới
         return `${totalCount}:${newestTs}:${newestId}`;
     }
-
+    //truyền vào 2 tham số là storyId và intervalMs với 3s
     function startCommentsPolling(storyId, intervalMs = 3000) {
-        // Clear interval cũ nếu có
+        // Clear interval cũ nếu như đang có bộ đếm nào đang chạy song song
         if (commentIntervals[storyId]) {
             clearInterval(commentIntervals[storyId]);
         }
-        // Tạo interval mới: chỉ re-render khi có thay đổi
+        // Tạo interval mới với hàm setInterval set time nội dung lặp đi lặp lại sau mỗi 3s
         commentIntervals[storyId] = setInterval(async () => {
             try {
                 const res = await fetch(`/user-stories/${storyId}/comments`, {
@@ -78,10 +83,12 @@
                 });
                 const data = await res.json();
                 if (!res.ok) return;
-
+                //tạo ra chữ ký hiện tại, để kiểm tra các mảng comment
                 const currentKey = computeCommentsKey(data.comments || []);
+                //nếu như key cuối gần nhất ko bằng key mới thì re-render
                 if (lastCommentKeys[storyId] !== currentKey) {
                     const container = document.getElementById('comments-list-' + storyId);
+                    //nếu có thay đổi thì hiển thị contrainer với data của comments mới
                     if (container) {
                         displayComments(container, data.comments || [], storyId);
                         lastCommentKeys[storyId] = currentKey;
@@ -106,7 +113,7 @@
         const panel = document.getElementById('story-panel-' + storyId);
         panel.classList.remove('hidden');
 
-        // Load comments khi mở panel + bật polling
+        // Load comments khi mở panel + bật polling, then là sau khi tải xong lần đầu sẽ bật hàm thăm dò
         loadComments(storyId).then(() => startCommentsPolling(storyId));
     }
 
@@ -870,15 +877,15 @@ function displayComments(container, comments, storyId) {
     // Giữ scroll position nếu user đang đọc phía trên
     const previousScrollTop = container.scrollTop;
     const isAtBottom = Math.abs(container.scrollHeight - container.scrollTop - container.clientHeight) < 10;
-
+    //xóa các comment cũ đã hiển thị từ 3s trước, để thêm comment mới vào mảng
     container.innerHTML = '';
     comments.forEach(comment => {
-        const commentDiv = createCommentElement(comment, storyId, 0);
+        const commentDiv = createCommentElement(comment, storyId, 0, comment.id);
         container.appendChild(commentDiv);
     });
 
     // Nếu người dùng đang ở cuối danh sách, tự động kéo xuống để thấy reply mới
-    if (isAtBottom) {
+    if (isAtBottom) {//nếu người dùng đang ở cuối mà có cmt mới thì đặt vị trí = mới
         container.scrollTop = container.scrollHeight;
     } else {
         // Giữ nguyên vị trí đọc cũ
@@ -887,20 +894,48 @@ function displayComments(container, comments, storyId) {
 }
 
 // Tạo HTML element cho 1 comment
-function createCommentElement(comment, storyId, level = 0) {
+function createCommentElement(comment, storyId, level = 0, rootId = null, mentionName = null) {
+    ///Tạo div bọc bên ngoài
     const div = document.createElement('div');
-    const baseIndent = level * 12; // tăng lùi theo level
+    const baseIndent = level * 12; // tăng lùi theo level: 0,12,24,..
     div.style.marginLeft = baseIndent + 'px';
     div.className = 'border-l-2 border-indigo-200 pl-3 py-2';
     div.id = 'comment-' + comment.id;
-
+    ///////////////////////////////////////
     // Format thời gian
     const commentDate = new Date(comment.created_at);
     const timeAgo = getTimeAgo(commentDate);
-    const hasReplies = Array.isArray(comment.replies) && comment.replies.length > 0;
-    const replyCount = hasReplies ? comment.replies.length : 0;
+    // Xử lý flatten replies: gom tất cả replies (mọi cấp) thành 1 cấp dưới parent
+    const flatReplies = [];
+    // hàm làm phẳng tất cả commment thành một level 1
+    function collectFlatReplies(items, parentUserName) {
+        if (!Array.isArray(items)) return;
+        //vòng lặp để đào sâu vào bên trong các replies con, vòng lặp if sẽ đào sau replies con nữa
+        items.forEach(child => {
+            //gôm tất cả dữ liệu con vào mảng flatReplies có cả dữ liệu comment và tên người đó
+            flatReplies.push({ node: child, replyTo: parentUserName });
+            if (Array.isArray(child.replies) && child.replies.length > 0) {
+                collectFlatReplies(child.replies, child.user?.name || '');
+            }
+        });
+    }
+    //dòng này kiểm tra làm phẳng comment nếu như có các điều kiện thõa ở dưới thì mới chạy được
+    if (level === 0 && Array.isArray(comment.replies) && comment.replies.length > 0) {
+        collectFlatReplies(comment.replies, comment.user?.name || '');
+    }
+
+    const hasReplies = level === 0 ? flatReplies.length > 0 : false;
+    const replyCount = hasReplies ? flatReplies.length : 0;
+    //biến isCollapsed để kiểm tra xem comment có bị collapse hay không
     const isCollapsed = collapsedCommentIds.has(comment.id);
 
+    // Nếu là reply (level 1), hiển thị prefix @name nếu có yêu cầu mention
+    const mentionPrefixHtml = mentionName ? `<span class="text-indigo-600 font-medium">@${mentionName}</span> ` : '';
+
+    const replyBtnHtml = (level === 0)
+        ? `<button onclick="toggleReplyForm(${(rootId ?? comment.id)}, ${storyId})" class="text-xs text-indigo-600 hover:text-indigo-800">Reply</button>`
+        : `<button onclick=\"toggleReplyForm(${(rootId ?? comment.id)}, ${storyId}, '@${comment.user.name} ')\" class=\"text-xs text-indigo-600 hover:text-indigo-800\">Reply</button>`;
+    //phần ruột bên trong comment
     div.innerHTML = `
         <div class="flex items-start justify-between mb-1">
             <div class="flex items-center gap-2">
@@ -916,11 +951,12 @@ function createCommentElement(comment, storyId, level = 0) {
                 </div>
             ` : ''}
         </div>
-        <div class="text-sm text-gray-700 whitespace-pre-wrap" id="comment-content-${comment.id}">${comment.content}</div>
+        <div class="text-sm text-gray-700 whitespace-pre-wrap" id="comment-content-${comment.id}">${mentionPrefixHtml}${comment.content}</div>
         <div class="mt-2 flex items-center gap-3">
-            <button onclick="toggleReplyForm(${comment.id}, ${storyId})" class="text-xs text-indigo-600 hover:text-indigo-800">Reply</button>
+            ${replyBtnHtml}
             ${hasReplies ? `<button id="toggle-replies-btn-${comment.id}" onclick="toggleReplies(${comment.id})" class="text-xs text-gray-600 hover:text-gray-800">${isCollapsed ? `Show replies (${replyCount})` : `Hide replies (${replyCount})`}</button>` : ''}
         </div>
+        ${level === 0 ? `
         <div id="reply-form-${comment.id}-${storyId}" class="mt-2 hidden">
             <form onsubmit="addReply(event, ${storyId}, ${comment.id})">
                 <textarea id="reply-input-${comment.id}-${storyId}" rows="2" placeholder="Write a reply..."
@@ -931,30 +967,36 @@ function createCommentElement(comment, storyId, level = 0) {
                 </div>
             </form>
         </div>
+        ` : ''}
     `;
     // Wrapper cho replies để có thể collapse
-    if (hasReplies && level < 5) {
+    if (hasReplies && level === 0) {
         const repliesWrapper = document.createElement('div');
         repliesWrapper.id = `replies-wrapper-${comment.id}`;
         repliesWrapper.className = 'mt-2 space-y-2';
         if (isCollapsed) {
             repliesWrapper.style.display = 'none';
         }
-        comment.replies.forEach(rep => {
-            const replyEl = createCommentElement(rep, storyId, level + 1);
+        flatReplies.forEach(item => {
+            const replyEl = createCommentElement(item.node, storyId, 1, (rootId ?? comment.id), item.replyTo);
+            replyEl.classList.add('comment-item');
             repliesWrapper.appendChild(replyEl);
         });
         div.appendChild(repliesWrapper);
     }
     return div;
 }
-
+// hàm toggle xử lí nút show/hide replies với commentId của nút đó
 function toggleReplies(commentId) {
+    //lấy wrapper và button show hide
     const wrapper = document.getElementById(`replies-wrapper-${commentId}`);
     const btn = document.getElementById(`toggle-replies-btn-${commentId}`);
     if (!wrapper || !btn) return;
-    const count = wrapper.children.length;
+    const count = wrapper.children.length;//đếm số lượng replies bên trong (show(5) / hide(5))
+
+    //nếu nút chứa replies đang bị ẩn
     if (wrapper.style.display === 'none') {
+        //xóa thuộc tính none để hiện ra
         wrapper.style.display = '';
         collapsedCommentIds.delete(commentId);
         btn.textContent = `Hide replies (${count})`;
@@ -965,11 +1007,28 @@ function toggleReplies(commentId) {
     }
 }
 
-// Toggle hiển thị form reply
-function toggleReplyForm(commentId, storyId) {
+// Toggle hiển thị form reply được gọi khi người dùng nhấp vào nút reply, mentionprefix('@An ')
+function toggleReplyForm(commentId, storyId, mentionPrefix = '') {
     const el = document.getElementById(`reply-form-${commentId}-${storyId}`);
     if (!el) return;
-    el.classList.toggle('hidden');
+    // Nếu có mentionPrefix, luôn mở form; nếu không toggle như cũ
+    if (mentionPrefix) {
+        el.classList.remove('hidden');
+    } else {
+        el.classList.toggle('hidden');
+    }
+    //biến textarea để tìm ô gõ reply
+    const textarea = document.getElementById(`reply-input-${commentId}-${storyId}`);
+    if (textarea && mentionPrefix) {
+        if (!textarea.value.startsWith(mentionPrefix)) {//nếu ko bắt đầu bằng chuỗ @ten + text thì ta gán
+            textarea.value = mentionPrefix + textarea.value;//gán @tên + text cần gõ
+        }
+        textarea.focus();//hàm đặt con tro
+        try {//try catch để đảm bảo con trỏ di chuyển đúng vị trí cuối cùng
+            const len = textarea.value.length;
+            textarea.setSelectionRange(len, len);
+        } catch (_) {}
+    }
 }
 
 // Gửi reply cho một comment
