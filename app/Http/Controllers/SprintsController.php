@@ -24,14 +24,19 @@ class SprintsController extends Controller
         }
         //với team đã lấy được, ta tìm sprint đang hoạt động của team đó
         $activeSprint = $team->sprints()->where('is_active', true)->first();
-        //tao biến backlogTasks để lưu các task chưa thuộc sprint nào
-        $backlogTasks = collect();
+
+        // Khi chưa có sprint đang chạy: liệt kê các Future Sprints (status=planning, is_active=false)
+        $futureSprints = collect();
         if (!$activeSprint) {
-            // Lấy các task chưa thuộc bất kỳ sprint nào sắp xếp theo độ ưu tiên
-            $backlogTasks = Tasks::whereNull('sprint_id')->orderBy('priority')->get();
+            $futureSprints = $team->sprints()
+                ->where('status', 'planning')
+                ->where('is_active', false)
+                ->with(['tasks' => function($q) { $q->orderBy('priority'); }])
+                ->orderByDesc('created_at')
+                ->get();
         }
 
-        return view('pages.sprintPlanning', compact('backlogTasks', 'activeSprint'));
+        return view('pages.sprintPlanning', compact('activeSprint', 'futureSprints'));
     }
     //hàm này để xử lý sprint mới được tạo
     public function store(Request $request)
@@ -39,7 +44,8 @@ class SprintsController extends Controller
         // Dùng Gate để kiểm tra xem có quyền tạo sprint hay ko?
         $this->authorize('plan-sprints');
 
-        $validated = $request->validate([
+        // Dùng helper request() để tránh cảnh báo phân tích tĩnh
+        $validated = request()->validate([
             'name' => 'required|string|max:255',
             'goal' => 'nullable|string',
             'start_date' => 'required|date',
@@ -120,6 +126,47 @@ class SprintsController extends Controller
             DB::rollBack();
             Log::error('Error cancelling sprint: ' . $e->getMessage());
             return back()->with('error', 'Đã có lỗi xảy ra khi hủy Sprint.');
+        }
+    }
+
+    // Bắt đầu một Future Sprint đã được lên kế hoạch (chọn từ Product Backlog)
+    public function start()
+    {
+        $this->authorize('plan-sprints');
+
+        $team = Auth::user()->teams()->first();
+        if (!$team) {
+            return back()->with('error', 'Bạn chưa thuộc team nào.');
+        }
+
+    // Lấy sprint id từ route param và tải model
+    $sprintId = request()->route('sprint');
+    $sprintModel = Sprints::findOrFail($sprintId);
+
+        // Đảm bảo sprint thuộc về team của user
+        if ($sprintModel->team_id !== $team->id) {
+            return back()->with('error', 'Bạn không có quyền bắt đầu sprint này.');
+        }
+
+        DB::beginTransaction();
+        try {
+            // Chỉ cho 1 sprint hoạt động cùng lúc: hủy kích hoạt sprint khác nếu có
+            $team->sprints()->where('is_active', true)->update(['is_active' => false]);
+
+            // Kích hoạt sprint này
+            $sprintModel->is_active = true;
+            $sprintModel->status = 'inProgress';
+            if (empty($sprintModel->start_date)) {
+                $sprintModel->start_date = now();
+            }
+            $sprintModel->save();
+
+            DB::commit();
+            return redirect()->route('sprint.create')->with('success', 'Sprint đã được bắt đầu.');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error starting sprint: ' . $e->getMessage());
+            return back()->with('error', 'Đã có lỗi xảy ra khi bắt đầu Sprint.');
         }
     }
 }

@@ -616,8 +616,11 @@ class TasksController extends Controller
         $user = Auth::user();
         $team = $user->teams()->first();
         $userRoleInTeam = $team ? $team->users()->find($user->id)?->pivot->roleInTeam : null;
-        //3 biến trên cũng lấy thong tin user đang đăng nhập và team của user đó và vai trò của user trong team. Sau đó lấy riêng vai trò của họ
-        if ($userRoleInTeam !== 'product_owner') {
+
+        // Kiểm tra quyền: Product Owner HOẶC Scrum Master/Developer (khi tạo subtask)
+        $isCreatingSubtask = $request->has('parent_id') && !empty($request->parent_id);
+        
+        if (!$isCreatingSubtask && $userRoleInTeam !== 'product_owner') {
             return response()->json(['message' => 'Bạn không có quyền tạo task.'], 403);
         }
 
@@ -627,48 +630,114 @@ class TasksController extends Controller
             'priority' => ['required', Rule::in(['low', 'medium', 'high'])],
             'storyPoints' => 'nullable|integer',
             'assigned_to' => 'nullable|exists:users,id',
+            'parent_id' => 'nullable|exists:tasks,id', // Cho phép tạo subtask
+            'sprint_id' => 'nullable|exists:sprints,id',
+            'status' => ['nullable', Rule::in(['toDo', 'inProgress', 'done'])],
         ]);
 
         $task = Tasks::create([
             'title' => $validated['title'],
-            'description' => $validated['description'],
+            'description' => $validated['description'] ?? null,
             'priority' => $validated['priority'],
-            'storyPoints' => $validated['storyPoints'],
-            'assigned_to' => $validated['assigned_to'],
+            'storyPoints' => $validated['storyPoints'] ?? null,
+            'assigned_to' => $validated['assigned_to'] ?? null,
             'created_by' => Auth::id(),
-            'sprint_id' => null,
-            'status' => 'toDo',
+            'parent_id' => $validated['parent_id'] ?? null,
+            'sprint_id' => $validated['sprint_id'] ?? null,
+            'status' => $validated['status'] ?? 'toDo',
         ]);
 
-        return response()->json(['message' => 'Tạo task thành công!', 'task' => $task->load('assignee')], 201);
+        return response()->json([
+            'message' => $isCreatingSubtask ? 'Tạo subtask thành công!' : 'Tạo task thành công!', 
+            'task' => $task->load('assignee')
+        ], 201);
     }
-    //hàm này để hiển thị form sửa task
+
+    /**
+     * Load danh sách tasks (dùng để lấy subtasks)
+     * 
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getTasks(Request $request)
+    {
+        /** @var Request $request */
+        
+        $query = Tasks::with('assignee');
+
+        // Lọc theo parent_id nếu có (để lấy subtasks của một User Story)
+        if ($request->has('parent_id')) {
+            $query->where('parent_id', $request->parent_id);
+        }
+
+        $tasks = $query->get();
+        return response()->json($tasks);
+    }
+
+    /**
+     * Hiển thị form sửa task
+     * 
+     * @param Tasks $task
+     * @return \Illuminate\Http\JsonResponse
+     */
    public function edit(Tasks $task)
     {
+        /** @var Tasks $task - Route model binding */
+        
         $user = Auth::user();
         $team = $user->teams()->first();
         $userRoleInTeam = $team ? $team->users()->find($user->id)?->pivot->roleInTeam : null;
-        //3 biến trên cũng lấy thong tin user đang đăng nhập và team của user đó và vai trò của user trong team. Sau đó lấy riêng vai trò của họ
-        if ($userRoleInTeam !== 'product_owner' || $task->sprint_id !== null) {
+        
+        // Cho phép Product Owner xem subtasks trong sprint
+        $isSubtask = !is_null($task->parent_id);
+        
+        // Chỉ Product Owner mới có quyền xem thông tin để edit
+        if ($userRoleInTeam !== 'product_owner') {
             return response()->json(['message' => 'Bạn không có quyền sửa task này.'], 403);
         }
-        return response()->json($task);
+        
+        // Nếu là User Story (không phải subtask), chỉ cho phép edit nếu chưa vào sprint
+        if (!$isSubtask && $task->sprint_id !== null) {
+            return response()->json(['message' => 'Không thể sửa User Story đã vào sprint.'], 403);
+        }
+        
+        // Load relationship để trả về đầy đủ thông tin
+        return response()->json(['task' => $task->load('assignee', 'epic')]);
     }
-    //hàm này để cập nhật task với POST
+
+    /**
+     * Cập nhật task (bao gồm subtasks)
+     * 
+     * @param Request $request
+     * @param Tasks $task
+     * @return \Illuminate\Http\JsonResponse
+     */
     public function update(Request $request, Tasks $task)
     {
+        /** @var Tasks $task - Route model binding */
+        /** @var Request $request */
+        
         $user = Auth::user();
         $team = $user->teams()->first();
         $userRoleInTeam = $team ? $team->users()->find($user->id)?->pivot->roleInTeam : null;
 
-        if ($userRoleInTeam !== 'product_owner' || $task->sprint_id !== null) {
+        // Cho phép Product Owner cập nhật subtasks trong sprint
+        $isSubtask = !is_null($task->parent_id);
+        
+        // Kiểm tra quyền: PO có thể update subtasks, hoặc User Stories chưa vào sprint
+        if ($userRoleInTeam !== 'product_owner') {
             return response()->json(['message' => 'Bạn không có quyền cập nhật task này.'], 403);
+        }
+        
+        if (!$isSubtask && $task->sprint_id !== null) {
+            return response()->json(['message' => 'Không thể cập nhật User Story đã vào sprint.'], 403);
         }
 
         $validated = $request->validate([
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
             'priority' => ['required', Rule::in(['low', 'medium', 'high'])],
+            'status' => ['nullable', Rule::in(['toDo', 'inProgress', 'done'])],
             'storyPoints' => 'nullable|integer',
             'assigned_to' => 'nullable|exists:users,id',
         ]);
@@ -676,24 +745,47 @@ class TasksController extends Controller
         $task->update($validated);
         return response()->json(['message' => 'Cập nhật task thành công!', 'task' => $task->load('assignee')]);
     }
-    //hàm này để xóa task
+
+    /**
+     * Xóa task (bao gồm subtasks)
+     * 
+     * @param Tasks $task
+     * @return \Illuminate\Http\JsonResponse
+     */
     public function destroy(Tasks $task)
     {
+        /** @var Tasks $task - Route model binding */
+        
         $user = Auth::user();
         $team = $user->teams()->first();
         $userRoleInTeam = $team ? $team->users()->find($user->id)?->pivot->roleInTeam : null;
 
-        if ($userRoleInTeam !== 'product_owner' || $task->sprint_id !== null) {
+        // Cho phép Product Owner xóa subtasks trong sprint
+        $isSubtask = !is_null($task->parent_id);
+        
+        // Kiểm tra quyền: PO có thể xóa subtasks, hoặc User Stories chưa vào sprint
+        if ($userRoleInTeam !== 'product_owner') {
             return response()->json(['message' => 'Bạn không có quyền xóa task này.'], 403);
+        }
+        
+        if (!$isSubtask && $task->sprint_id !== null) {
+            return response()->json(['message' => 'Không thể xóa User Story đã vào sprint.'], 403);
         }
 
         $task->delete();
         return response()->json(['message' => 'Xóa task thành công!']);
     }
 
-    //Hàm này gợi ý task bằng AI
+    /**
+     * Gợi ý task bằng AI
+     * 
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
     public function suggestAllWithAI(Request $request)
     {
+        /** @var Request $request */
+        
         $validated = $request->validate([
             'title' => 'required|string|max:255',
         ]);

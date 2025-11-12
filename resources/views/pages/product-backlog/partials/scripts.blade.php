@@ -678,6 +678,7 @@ let draggedFromScopeId = null; // epic_id hoặc sprint_id
 
 // Bắt đầu kéo story
 function dragStory(event) {
+    //closet là để tìm ra phạm vi gần nhất của phần tử được kéo
     draggedStoryElement = event.target.closest('.story-item');
     draggedStoryId = draggedStoryElement.dataset.storyId;
 
@@ -707,7 +708,7 @@ function allowDropStory(event){
         dropZone.classList.add('bg-blue-50', 'border-2', 'border-dashed', 'border-blue-400');
         event.dataTransfer.dropEffect = 'move';
     }else{
-        //không cho phép kéo Epic/Sprint khác
+        //không cho phép kéo Epic/Sprint khác, hiển thị icon cấm
         event.dataTransfer.dropEffect = 'none';
     }
 }

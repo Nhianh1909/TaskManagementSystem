@@ -50,6 +50,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/future-sprints', [TasksController::class, 'storeFutureSprint'])->name('future-sprints.store');
     Route::patch('/future-sprints/{sprint}', [TasksController::class, 'updateFutureSprint'])->name('future-sprints.update');
     Route::delete('/future-sprints/{sprint}', [TasksController::class, 'destroyFutureSprint'])->name('future-sprints.destroy');
+    // Activate a planned future sprint
+    Route::post('/future-sprints/{sprint}/activate', [SprintsController::class, 'start'])->name('future-sprints.activate');
 
     //epic & user stories in product backlog
     Route::get('/addEpic', [TasksController::class, 'addEpic'])->name('addEpic');
@@ -71,6 +73,7 @@ Route::middleware('auth')->group(function () {
     
     // Task Routes
     Route::get('/tasksboard', [TasksController::class, 'taskBoard'])->name('tasksboard');
+    Route::get('/tasks', [TasksController::class, 'getTasks'])->name('tasks.index'); // Thêm để load subtasks
     Route::post('/tasks', [TasksController::class, 'store'])->name('tasks.store');
     Route::get('/tasks/{task}/edit', [TasksController::class, 'edit'])->name('tasks.edit');
     Route::patch('/tasks/{task}', [TasksController::class, 'update'])->name('tasks.update');
