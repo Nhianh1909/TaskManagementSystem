@@ -1,29 +1,31 @@
-<div id="create-future-sprint-modal" class="hidden fixed inset-0 z-50" style="pointer-events: auto;">
+<div id="edit-future-sprint-modal" class="hidden fixed inset-0 z-50" style="pointer-events: auto;">
     <!-- Backdrop -->
-    <div class="fixed inset-0 bg-black bg-opacity-40" onclick="closeFutureSprintModal()"></div>
+    <div class="fixed inset-0 bg-black bg-opacity-40" onclick="closeEditFutureSprintModal()"></div>
 
     <!-- Modal Content -->
     <div class="fixed inset-0 flex items-center justify-center p-4">
         <div class="bg-white rounded-lg shadow-xl w-full max-w-md transform transition-all">
             <!-- Header -->
             <div class="flex items-center justify-between p-6 border-b">
-                <h3 class="text-xl font-semibold text-gray-800">Create Future Sprint</h3>
+                <h3 class="text-xl font-semibold text-gray-800">Edit Future Sprint</h3>
                 <button type="button"
-                        onclick="closeFutureSprintModal()"
+                        onclick="closeEditFutureSprintModal()"
                         class="text-gray-400 hover:text-gray-600 text-2xl leading-none">
                     &times;
                 </button>
             </div>
 
             <!-- Form -->
-            <form id="create-future-sprint-form" class="p-6 space-y-4">
+            <form id="edit-future-sprint-form" class="p-6 space-y-4">
+                <input type="hidden" id="edit-sprint-id" name="sprint_id">
+
                 <!-- Sprint Name -->
                 <div>
-                    <label for="sprint-name" class="block text-sm font-medium text-gray-700 mb-1">
+                    <label for="edit-sprint-name" class="block text-sm font-medium text-gray-700 mb-1">
                         Sprint Name <span class="text-red-500">*</span>
                     </label>
                     <input type="text"
-                           id="sprint-name"
+                           id="edit-sprint-name"
                            name="name"
                            required
                            placeholder="e.g., Sprint 5"
@@ -32,10 +34,10 @@
 
                 <!-- Sprint Goal (Optional) -->
                 <div>
-                    <label for="sprint-goal" class="block text-sm font-medium text-gray-700 mb-1">
+                    <label for="edit-sprint-goal" class="block text-sm font-medium text-gray-700 mb-1">
                         Sprint Goal <span class="text-gray-400">(Optional)</span>
                     </label>
-                    <textarea id="sprint-goal"
+                    <textarea id="edit-sprint-goal"
                               name="goal"
                               rows="3"
                               placeholder="Describe the sprint goal..."
@@ -44,46 +46,36 @@
 
                 <!-- Start Date (Optional) -->
                 <div>
-                    <label for="sprint-start-date" class="block text-sm font-medium text-gray-700 mb-1">
+                    <label for="edit-sprint-start-date" class="block text-sm font-medium text-gray-700 mb-1">
                         Start Date <span class="text-gray-400">(Optional)</span>
                     </label>
                     <input type="date"
-                           id="sprint-start-date"
+                           id="edit-sprint-start-date"
                            name="start_date"
-                           min="{{ $minStartDate ?? now()->format('Y-m-d') }}"
                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-                    <p class="text-xs text-gray-500 mt-1">
-                        @if(isset($minStartDate) && $minStartDate > now()->format('Y-m-d'))
-                            ⚠️ Must be after the previous sprint's end date ({{ \Carbon\Carbon::parse($minStartDate)->subDay()->format('M d, Y') }})
-                        @else
-                            Must be today or later
-                        @endif
-                    </p>
                 </div>
 
                 <!-- End Date (Optional) -->
                 <div>
-                    <label for="sprint-end-date" class="block text-sm font-medium text-gray-700 mb-1">
+                    <label for="edit-sprint-end-date" class="block text-sm font-medium text-gray-700 mb-1">
                         End Date <span class="text-gray-400">(Optional)</span>
                     </label>
                     <input type="date"
-                           id="sprint-end-date"
+                           id="edit-sprint-end-date"
                            name="end_date"
-                           min="{{ $minStartDate ?? now()->format('Y-m-d') }}"
                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-                    <p class="text-xs text-gray-500 mt-1">Must be after or equal to start date</p>
                 </div>
 
                 <!-- Buttons -->
                 <div class="flex items-center justify-end space-x-3 pt-4">
                     <button type="button"
-                            onclick="closeFutureSprintModal()"
+                            onclick="closeEditFutureSprintModal()"
                             class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-300">
                         Cancel
                     </button>
                     <button type="submit"
                             class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        Create Sprint
+                        Update Sprint
                     </button>
                 </div>
             </form>

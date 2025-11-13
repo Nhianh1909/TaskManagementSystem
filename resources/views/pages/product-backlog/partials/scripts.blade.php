@@ -283,11 +283,11 @@
     function submitCreateStory(event) {
         event.preventDefault();
 
-        // Lấy dữ liệu từ form
+        // ✅ Lấy dữ liệu từ form - Status mặc định là 'toDo' cho US trong Product Backlog
         const storyData = {
             title: document.getElementById('story-title').value,
             description: document.getElementById('story-description').value,
-            status: document.getElementById('story-status').value,
+            status: 'toDo',  // ✅ Hardcode - User Stories in Product Backlog luôn là To Do
             storyPoints: document.getElementById('story-points').value || null,
             priority: document.getElementById('story-priority').value,
             assigned_to: document.getElementById('story-assignee').value || null,
@@ -537,15 +537,23 @@
                 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
             }
         })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                // Nếu response không OK (403, 500, etc.), đọc error message
+                return response.json().then(errorData => {
+                    throw new Error(errorData.message || 'Failed to delete user story');
+                });
+            }
+            return response.json();
+        })
         .then(data => {
             console.log('User Story deleted successfully:', data);
-            alert('User Story deleted successfully!');
+            alert(data.message || 'User Story deleted successfully!');
             window.location.reload();
         })
         .catch(error => {
             console.error('Error deleting story:', error);
-            alert('Failed to delete user story. Please try again.');
+            alert('❌ Error: ' + error.message);
         });
     }
 
@@ -593,17 +601,38 @@
     }
     document.addEventListener('DOMContentLoaded', function(){
         const form = document.getElementById('create-future-sprint-form');
+        const startDateInput = document.getElementById('sprint-start-date');
+        const endDateInput = document.getElementById('sprint-end-date');
+
+        // ✅ Khi start date thay đổi, update min của end date
+        if (startDateInput && endDateInput) {
+            startDateInput.addEventListener('change', function() {
+                if (this.value) {
+                    endDateInput.min = this.value;
+                }
+            });
+        }
 
         if(form){
             form.addEventListener('submit', async function(e){
                 e.preventDefault(); //ngăn chặn hành vi submit mặc định
+                
                 //Lấy dữ liệu từ form
                 const formData = new FormData(this);
+                const startDate = formData.get('start_date');
+                const endDate = formData.get('end_date');
+                
+                // ✅ Validation phía client
+                if (startDate && endDate && new Date(endDate) < new Date(startDate)) {
+                    alert('End date must be after or equal to start date!');
+                    return;
+                }
+                
                 const data = {
                     name: formData.get('name'),
                     goal: formData.get('goal'),
-                    start_date: formData.get('start_date') || null,
-                    end_date: formData.get('end_date') || null,
+                    start_date: startDate || null,
+                    end_date: endDate || null,
                 };
 
                 try {
@@ -621,7 +650,13 @@
                         closeFutureSprintModal();
                         location.reload(); // Reload để hiển thị sprint mới
                     } else {
-                        alert(result.message || 'Có lỗi xảy ra!');
+                        // ✅ Hiển thị lỗi validation từ server
+                        if (result.errors) {
+                            const errorMessages = Object.values(result.errors).flat().join('\n');
+                            alert('Validation errors:\n' + errorMessages);
+                        } else {
+                            alert(result.message || 'Có lỗi xảy ra!');
+                        }
                     }
                 } catch (error) {
                     console.error('Error:', error);
@@ -630,6 +665,116 @@
             })
         }
     })
+    
+    // ✅ Open Edit Future Sprint Modal
+    async function openEditFutureSprintModal(sprintId) {
+        try {
+            // Fetch sprint data
+            const response = await fetch(`/future-sprints/${sprintId}`);
+            const sprint = await response.json();
+            
+            if (response.ok) {
+                // Populate form
+                document.getElementById('edit-sprint-id').value = sprint.id;
+                document.getElementById('edit-sprint-name').value = sprint.name;
+                document.getElementById('edit-sprint-goal').value = sprint.goal || '';
+                document.getElementById('edit-sprint-start-date').value = sprint.start_date || '';
+                document.getElementById('edit-sprint-end-date').value = sprint.end_date || '';
+                
+                // Show modal
+                document.getElementById('edit-future-sprint-modal').classList.remove('hidden');
+            } else {
+                alert('Failed to load sprint data');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Error loading sprint data');
+        }
+    }
+    
+    // ✅ Close Edit Future Sprint Modal
+    function closeEditFutureSprintModal() {
+        document.getElementById('edit-future-sprint-modal').classList.add('hidden');
+        document.getElementById('edit-future-sprint-form').reset();
+    }
+    
+    // ✅ Handle Edit Form Submit
+    document.addEventListener('DOMContentLoaded', function() {
+        const editForm = document.getElementById('edit-future-sprint-form');
+        if (editForm) {
+            editForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                const sprintId = document.getElementById('edit-sprint-id').value;
+                const formData = new FormData(this);
+                const data = {
+                    name: formData.get('name'),
+                    goal: formData.get('goal'),
+                    start_date: formData.get('start_date') || null,
+                    end_date: formData.get('end_date') || null,
+                };
+                
+                try {
+                    const response = await fetch(`/future-sprints/${sprintId}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                        },
+                        body: JSON.stringify(data)
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (response.ok) {
+                        alert('Future Sprint updated successfully!');
+                        closeEditFutureSprintModal();
+                        location.reload();
+                    } else {
+                        if (result.errors) {
+                            const errorMessages = Object.values(result.errors).flat().join('\n');
+                            alert('Validation errors:\n' + errorMessages);
+                        } else {
+                            alert(result.message || 'Error updating sprint');
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert('Error updating Future Sprint');
+                }
+            });
+        }
+    });
+    
+    // ✅ Delete Future Sprint
+    async function deleteFutureSprint(sprintId) {
+        if (!confirm('Are you sure you want to delete this Future Sprint? All stories will be moved back to Product Backlog.')) {
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/future-sprints/${sprintId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                }
+            });
+            
+            const result = await response.json();
+            
+            if (response.ok) {
+                alert('Future Sprint deleted successfully!');
+                location.reload();
+            } else {
+                alert(result.message || 'Error deleting sprint');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Error deleting Future Sprint');
+        }
+    }
+    
     // Toggle form gán sprint
     function toggleAssignSprintForm(storyId) {
   const el = document.getElementById('assign-sprint-form-' + storyId);

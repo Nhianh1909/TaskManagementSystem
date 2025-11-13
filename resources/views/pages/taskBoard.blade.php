@@ -333,6 +333,8 @@
                     </select>
                 </div>
 
+                {{-- ✅ ĐÃ XÓA Ô Story Points - Vì subtask không có points riêng --}}
+                {{-- Story Points chỉ nằm ở User Story (task cha) --}}
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">Assign To</label>
                     <select id="subtask-assigned-to" name="assigned_to" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
@@ -341,6 +343,20 @@
                             <option value="{{ $member->id }}">{{ $member->name }}</option>
                         @endforeach
                     </select>
+                </div>
+            </div>
+
+            {{-- Thông báo cho user biết --}}
+            <div class="bg-blue-50 border-l-4 border-blue-400 p-3 rounded">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-info-circle text-blue-400"></i>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-xs text-blue-700">
+                            <strong>Note:</strong> Subtasks inherit Story Points from the parent User Story.
+                        </p>
+                    </div>
                 </div>
             </div>
 
@@ -527,9 +543,12 @@
                     title: formData.get('title'),
                     description: formData.get('description') || '',
                     priority: formData.get('priority'),
+                    storyPoints: parseInt(formData.get('storyPoints')) || null,
                     assigned_to: formData.get('assigned_to') || null,
                     parent_id: formData.get('parent_id')
                 };
+
+                console.log('Subtask data being sent:', data); // Debug
 
                 // Chỉ set status và sprint_id khi CREATE, không set khi EDIT
                 if (!isEdit) {
@@ -618,6 +637,7 @@
                 document.getElementById('subtask-title').value = task.title;
                 document.getElementById('subtask-description').value = task.description || '';
                 document.getElementById('subtask-priority').value = task.priority;
+                // ✅ ĐÃ XÓA dòng set subtask-story-points - Vì subtask không có points
                 document.getElementById('subtask-assigned-to').value = task.assigned_to || '';
 
                 // Tìm tên User Story từ dropdown

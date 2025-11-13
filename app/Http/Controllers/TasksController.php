@@ -97,10 +97,24 @@ class TasksController extends Controller
                          ->with(['tasks' => function($query) {
                              $query->orderBy('order_index', 'asc');
                          }])
-                         ->orderBy('created_at', 'desc')
+                         ->orderBy('created_at', 'asc') // ✅ Sắp xếp sprint cũ → mới để đảm bảo tuần tự
                          ->get();
 
-        return view('pages.product-backlog', compact('getEpics', 'tasksWithoutEpic', 'team', 'futureSprints'));
+        // ✅ Lấy sprint gần nhất (bao gồm ALL sprints: active, completed, planning)
+        // Logic: Future sprint mới phải bắt đầu SAU sprint gần nhất (kể cả future sprints khác)
+        $latestSprint = $team->sprints()
+            ->whereNotNull('end_date')
+            ->orderBy('end_date', 'desc')  // ✅ Lấy sprint có end_date xa nhất
+            ->first();
+
+        // ✅ Tính ngày tối thiểu cho start_date của sprint mới
+        // Nếu có sprint nào có end_date → phải sau end_date của sprint đó (kể cả future sprint)
+        // Nếu chưa có sprint nào có end_date → có thể bắt đầu từ hôm nay
+        $minStartDate = $latestSprint && $latestSprint->end_date
+            ? \Carbon\Carbon::parse($latestSprint->end_date)->addDay()->format('Y-m-d')
+            : now()->format('Y-m-d');
+
+        return view('pages.product-backlog', compact('getEpics', 'tasksWithoutEpic', 'team', 'futureSprints', 'minStartDate'));
     }
     // FEATURE: Future Sprint Management
 
@@ -117,11 +131,40 @@ class TasksController extends Controller
             ], 403);
         }
 
+        // ✅ Lấy sprint gần nhất (bao gồm ALL sprints: active, completed, planning)
+        // Logic: Sprint mới phải bắt đầu SAU sprint gần nhất hiện có
+        $latestSprint = $team->sprints()
+            ->whereNotNull('end_date')
+            ->orderBy('end_date', 'desc')
+            ->first();
+
+        // ✅ Tính toán ngày tối thiểu cho start_date
+        // - Nếu có sprint nào có end_date → phải sau end_date của sprint đó
+        // - Nếu không có sprint nào → phải từ hôm nay trở đi
+        $minStartDate = $latestSprint && $latestSprint->end_date
+            ? \Carbon\Carbon::parse($latestSprint->end_date)->addDay()->format('Y-m-d')
+            : now()->format('Y-m-d');
+
+        // ✅ Validation với rule động
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'goal' => 'nullable|string',
-            'start_date' => 'nullable|date|after_or_equal:today',
-            'end_date' => 'nullable|date|after_or_equal:start_date',
+            'start_date' => [
+                'nullable',
+                'date',
+                'after_or_equal:' . $minStartDate, // ✅ Phải sau sprint trước hoặc hôm nay
+            ],
+            'end_date' => [
+                'nullable',
+                'date',
+                'after_or_equal:start_date', // ✅ Phải sau start_date
+            ],
+        ], [
+            // ✅ Custom error messages
+            'start_date.after_or_equal' => $latestSprint
+                ? "Start date must be after the previous sprint's end date ({$latestSprint->end_date})."
+                : 'Start date cannot be in the past.',
+            'end_date.after_or_equal' => 'End date must be after or equal to start date.',
         ]);
 
         $futureSprint = $team->sprints()->create([
@@ -164,7 +207,7 @@ class TasksController extends Controller
                 'message'=>'Sprint không hợp lệ, không phải planning và ko thuộc team'
             ], 422);
         }
-        
+
         // Đảm bảo story thuộc cùng team: nếu có epic thì check team theo epic
         if($task->epic_id){
             $epic = Epics::find($task->epic_id);
@@ -174,7 +217,7 @@ class TasksController extends Controller
                 ], 422);
             }
         }
-        
+
         // Nếu story đã nằm trong sprint này rồi thì không làm gì
         if($task->sprint_id === $sprint->id){
             return response()->json([
@@ -182,7 +225,7 @@ class TasksController extends Controller
                 'story'=>$task,
             ]);
         }
-        
+
         //Set order_index = max + 1 trong sprint
         $maxOrder = Tasks::where('sprint_id', $sprint->id)->max('order_index');
         $nextOrder = is_null($maxOrder) ? 1 : $maxOrder + 1;
@@ -211,7 +254,7 @@ class TasksController extends Controller
                 'ids'      => 'required|array|min:1',
                 'ids.*'    => 'integer|exists:tasks,id',
             ]);
-            
+
             // Xác thực scope thuộc team của user
             if($data['scope'] === 'sprint'){
                 $sprint = Sprints::where('id', $data['scope_id'])
@@ -238,7 +281,7 @@ class TasksController extends Controller
             } else {
                 $tasks->where('epic_id', $data['scope_id']);
             }
-            
+
             if($tasks->count() !== count($data['ids'])){
                 return response()->json([
                     'message' => 'Một hoặc nhiều User Story không thuộc đúng Epic/Sprint này.'
@@ -260,6 +303,19 @@ class TasksController extends Controller
             return response()->json(['message' => 'Cập nhật thứ tự thành công!']);
         }
         //UPDATE Future Sprint
+
+        // ✅ GET: Show Future Sprint data (for Edit modal)
+        public function showFutureSprint(Sprints $sprint)
+        {
+            return response()->json([
+                'id' => $sprint->id,
+                'name' => $sprint->name,
+                'goal' => $sprint->goal,
+                'start_date' => $sprint->start_date,
+                'end_date' => $sprint->end_date,
+                'status' => $sprint->status,
+            ]);
+        }
 
         public function updateFutureSprint(Request $request, Sprints $sprint)
         {
@@ -531,16 +587,30 @@ class TasksController extends Controller
         // Chỉ Product Owner mới được xóa User Story
         if ($userRoleInTeam !== 'product_owner') {
             return response()->json([
-                'message' => 'Bạn không có quyền xóa User Story.'
+                'message' => 'Bạn không có quyền xóa User Story. Chỉ Product Owner mới có quyền này.'
             ], 403);
         }
 
-        // Xóa User Story
-        $task->delete();
+        try {
+            // ✅ Xóa tất cả subtasks trước (nếu có)
+            $task->subTasks()->delete();
 
-        return response()->json([
-            'message' => 'User Story deleted successfully!'
-        ]);
+            // ✅ Xóa tất cả comments của US này
+            $task->comments()->delete();
+
+            // ✅ Xóa User Story
+            $task->delete();
+
+            return response()->json([
+                'message' => 'User Story deleted successfully!',
+                'success' => true
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Failed to delete User Story: ' . $e->getMessage(),
+                'success' => false
+            ], 500);
+        }
     }
 
     /**
@@ -619,16 +689,18 @@ class TasksController extends Controller
 
         // Kiểm tra quyền: Product Owner HOẶC Scrum Master/Developer (khi tạo subtask)
         $isCreatingSubtask = $request->has('parent_id') && !empty($request->parent_id);
-        
+
         if (!$isCreatingSubtask && $userRoleInTeam !== 'product_owner') {
             return response()->json(['message' => 'Bạn không có quyền tạo task.'], 403);
         }
 
+        // ✅ LOGIC MỚI: Subtask KHÔNG được nhập storyPoints
+        // Lý do: Story Points chỉ nằm ở User Story (task cha)
         $validated = $request->validate([
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
             'priority' => ['required', Rule::in(['low', 'medium', 'high'])],
-            'storyPoints' => 'nullable|integer',
+            'storyPoints' => $isCreatingSubtask ? 'prohibited' : 'nullable|integer', // ✅ Cấm storyPoints nếu là subtask
             'assigned_to' => 'nullable|exists:users,id',
             'parent_id' => 'nullable|exists:tasks,id', // Cho phép tạo subtask
             'sprint_id' => 'nullable|exists:sprints,id',
@@ -639,7 +711,7 @@ class TasksController extends Controller
             'title' => $validated['title'],
             'description' => $validated['description'] ?? null,
             'priority' => $validated['priority'],
-            'storyPoints' => $validated['storyPoints'] ?? null,
+            'storyPoints' => $isCreatingSubtask ? null : ($validated['storyPoints'] ?? null), // ✅ Force null nếu là subtask
             'assigned_to' => $validated['assigned_to'] ?? null,
             'created_by' => Auth::id(),
             'parent_id' => $validated['parent_id'] ?? null,
@@ -648,21 +720,21 @@ class TasksController extends Controller
         ]);
 
         return response()->json([
-            'message' => $isCreatingSubtask ? 'Tạo subtask thành công!' : 'Tạo task thành công!', 
+            'message' => $isCreatingSubtask ? 'Tạo subtask thành công!' : 'Tạo task thành công!',
             'task' => $task->load('assignee')
         ], 201);
     }
 
     /**
      * Load danh sách tasks (dùng để lấy subtasks)
-     * 
+     *
      * @param Request $request
      * @return \Illuminate\Http\JsonResponse
      */
     public function getTasks(Request $request)
     {
         /** @var Request $request */
-        
+
         $query = Tasks::with('assignee');
 
         // Lọc theo parent_id nếu có (để lấy subtasks của một User Story)
@@ -676,38 +748,38 @@ class TasksController extends Controller
 
     /**
      * Hiển thị form sửa task
-     * 
+     *
      * @param Tasks $task
      * @return \Illuminate\Http\JsonResponse
      */
    public function edit(Tasks $task)
     {
         /** @var Tasks $task - Route model binding */
-        
+
         $user = Auth::user();
         $team = $user->teams()->first();
         $userRoleInTeam = $team ? $team->users()->find($user->id)?->pivot->roleInTeam : null;
-        
+
         // Cho phép Product Owner xem subtasks trong sprint
         $isSubtask = !is_null($task->parent_id);
-        
+
         // Chỉ Product Owner mới có quyền xem thông tin để edit
         if ($userRoleInTeam !== 'product_owner') {
             return response()->json(['message' => 'Bạn không có quyền sửa task này.'], 403);
         }
-        
+
         // Nếu là User Story (không phải subtask), chỉ cho phép edit nếu chưa vào sprint
         if (!$isSubtask && $task->sprint_id !== null) {
             return response()->json(['message' => 'Không thể sửa User Story đã vào sprint.'], 403);
         }
-        
+
         // Load relationship để trả về đầy đủ thông tin
         return response()->json(['task' => $task->load('assignee', 'epic')]);
     }
 
     /**
      * Cập nhật task (bao gồm subtasks)
-     * 
+     *
      * @param Request $request
      * @param Tasks $task
      * @return \Illuminate\Http\JsonResponse
@@ -716,58 +788,100 @@ class TasksController extends Controller
     {
         /** @var Tasks $task - Route model binding */
         /** @var Request $request */
-        
+
         $user = Auth::user();
         $team = $user->teams()->first();
         $userRoleInTeam = $team ? $team->users()->find($user->id)?->pivot->roleInTeam : null;
 
         // Cho phép Product Owner cập nhật subtasks trong sprint
         $isSubtask = !is_null($task->parent_id);
-        
-        // Kiểm tra quyền: PO có thể update subtasks, hoặc User Stories chưa vào sprint
+
+        // Kiểm tra quyền: Chỉ Product Owner được cập nhật
         if ($userRoleInTeam !== 'product_owner') {
             return response()->json(['message' => 'Bạn không có quyền cập nhật task này.'], 403);
         }
-        
-        if (!$isSubtask && $task->sprint_id !== null) {
-            return response()->json(['message' => 'Không thể cập nhật User Story đã vào sprint.'], 403);
+
+        // Cho phép cập nhật trạng thái của User Story ngay cả khi đã vào sprint,
+        // nhưng khóa các trường khác (title, description, storyPoints, priority, assigned_to)
+        $isUserStoryInSprint = (!$isSubtask && $task->sprint_id !== null);
+
+        // ✅ LOGIC MỚI: Subtask KHÔNG được sửa storyPoints
+        // Lý do: Story Points chỉ nằm ở User Story (task cha)
+        if ($isUserStoryInSprint) {
+            // Chỉ cho phép cập nhật trạng thái khi US đã vào sprint
+            $validated = $request->validate([
+                'status' => ['required', Rule::in(['toDo', 'inProgress', 'done'])],
+            ]);
+            $updateData = [
+                'status' => $validated['status'],
+            ];
+        } else {
+            $validated = $request->validate([
+                'title' => 'required|string|max:255',
+                'description' => 'nullable|string',
+                'priority' => ['required', Rule::in(['low', 'medium', 'high'])],
+                'status' => ['nullable', Rule::in(['toDo', 'inProgress', 'done'])],
+                'storyPoints' => $isSubtask ? 'prohibited' : 'nullable|integer', // ✅ Cấm storyPoints nếu là subtask
+                'assigned_to' => 'nullable|exists:users,id',
+            ]);
+            $updateData = $validated;
         }
 
-        $validated = $request->validate([
-            'title' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'priority' => ['required', Rule::in(['low', 'medium', 'high'])],
-            'status' => ['nullable', Rule::in(['toDo', 'inProgress', 'done'])],
-            'storyPoints' => 'nullable|integer',
-            'assigned_to' => 'nullable|exists:users,id',
-        ]);
+        // ✅ Nếu là subtask, bỏ storyPoints khỏi dữ liệu update
+        if ($isSubtask) {
+            unset($updateData['storyPoints']);
+        }
 
-        $task->update($validated);
+        // ✅ Thực hiện cập nhật
+        $task->update($updateData);
+
+        // ✅ Nếu là subtask và trạng thái thay đổi → kiểm tra và tự động đóng US khi tất cả subtasks đã done
+        if ($isSubtask && array_key_exists('status', $updateData)) {
+            try {
+                $parent = $task->parent_id ? Tasks::find($task->parent_id) : null;
+                if ($parent) {
+                    $totalSubtasks = $parent->subTasks()->count();
+                    if ($totalSubtasks > 0) {
+                        $doneSubtasks = $parent->subTasks()->where('status', 'done')->count();
+                        if ($doneSubtasks === $totalSubtasks && $parent->status !== 'done') {
+                            // Đánh dấu US là done để burndown burn points
+                            $parent->update(['status' => 'done']);
+                        } elseif ($doneSubtasks < $totalSubtasks && $parent->status === 'done') {
+                            // Nếu một subtask bị reopen, chuyển US về inProgress
+                            $parent->update(['status' => 'inProgress']);
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {
+                \Log::warning('Auto-close US after all subtasks done failed: ' . $e->getMessage());
+            }
+        }
+
         return response()->json(['message' => 'Cập nhật task thành công!', 'task' => $task->load('assignee')]);
     }
 
     /**
      * Xóa task (bao gồm subtasks)
-     * 
+     *
      * @param Tasks $task
      * @return \Illuminate\Http\JsonResponse
      */
     public function destroy(Tasks $task)
     {
         /** @var Tasks $task - Route model binding */
-        
+
         $user = Auth::user();
         $team = $user->teams()->first();
         $userRoleInTeam = $team ? $team->users()->find($user->id)?->pivot->roleInTeam : null;
 
         // Cho phép Product Owner xóa subtasks trong sprint
         $isSubtask = !is_null($task->parent_id);
-        
+
         // Kiểm tra quyền: PO có thể xóa subtasks, hoặc User Stories chưa vào sprint
         if ($userRoleInTeam !== 'product_owner') {
             return response()->json(['message' => 'Bạn không có quyền xóa task này.'], 403);
         }
-        
+
         if (!$isSubtask && $task->sprint_id !== null) {
             return response()->json(['message' => 'Không thể xóa User Story đã vào sprint.'], 403);
         }
@@ -778,14 +892,14 @@ class TasksController extends Controller
 
     /**
      * Gợi ý task bằng AI
-     * 
+     *
      * @param Request $request
      * @return \Illuminate\Http\JsonResponse
      */
     public function suggestAllWithAI(Request $request)
     {
         /** @var Request $request */
-        
+
         $validated = $request->validate([
             'title' => 'required|string|max:255',
         ]);

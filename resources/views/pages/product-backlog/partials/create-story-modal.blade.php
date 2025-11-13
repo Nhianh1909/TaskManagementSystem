@@ -34,21 +34,8 @@
                                   placeholder="Detailed description..."></textarea>
                     </div>
 
-                    <!-- Row 1: Status and Story Points -->
+                    <!-- Row 1: Story Points and Priority -->
                     <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label for="story-status" class="block text-sm font-medium text-gray-700 mb-1">
-                                Status <span class="text-red-500">*</span>
-                            </label>
-                            <select id="story-status"
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                                    required>
-                                <option value="toDo">To Do</option>
-                                <option value="inProgress">In Progress</option>
-                                <option value="done">Done</option>
-                            </select>
-                        </div>
-
                         <div>
                             <label for="story-points" class="block text-sm font-medium text-gray-700 mb-1">
                                 Story Points
@@ -59,10 +46,7 @@
                                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                                    placeholder="e.g., 5">
                         </div>
-                    </div>
 
-                    <!-- Row 2: Priority and Assigned To -->
-                    <div class="grid grid-cols-2 gap-4">
                         <div>
                             <label for="story-priority" class="block text-sm font-medium text-gray-700 mb-1">
                                 Priority <span class="text-red-500">*</span>
@@ -75,21 +59,25 @@
                                 <option value="high">High</option>
                             </select>
                         </div>
+                    </div>
 
-                        <div>
-                            <label for="story-assignee" class="block text-sm font-medium text-gray-700 mb-1">
-                                Assigned To
-                            </label>
-                            <select id="story-assignee"
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
-                                <option value="">Unassigned</option>
-                                @if($team)
-                                    @foreach($team->users as $member)
-                                        <option value="{{ $member->id }}">{{ $member->name }}</option>
-                                    @endforeach
-                                @endif
-                            </select>
-                        </div>
+                    <!-- Row 2: Assigned To -->
+                    <div>
+                        <label for="story-assignee" class="block text-sm font-medium text-gray-700 mb-1">
+                            Assigned To <span class="text-gray-400">(Optional)</span>
+                        </label>
+                        <select id="story-assignee"
+                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                            <option value="">Unassigned</option>
+                            @if($team)
+                                @foreach($team->users as $member)
+                                    <option value="{{ $member->id }}">{{ $member->name }}</option>
+                                @endforeach
+                            @endif
+                        </select>
+                        <p class="text-xs text-gray-500 mt-1">
+                            💡 User Stories in Product Backlog default to "To Do" status
+                        </p>
                     </div>
 
                     <!-- Epic (Read-only) -->

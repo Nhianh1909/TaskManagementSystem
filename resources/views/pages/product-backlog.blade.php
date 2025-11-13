@@ -76,8 +76,29 @@
                                                     <h4 class="text-lg font-semibold text-gray-800 truncate">
                                                         {{ $sprint->name }}
                                                     </h4>
+                                                    
+                                                    {{-- Edit & Delete Buttons --}}
+                                                    <div class="flex items-center gap-2">
+                                                        <button type="button"
+                                                                onclick="openEditFutureSprintModal({{ $sprint->id }})"
+                                                                class="p-1.5 text-blue-600 hover:bg-blue-100 rounded transition"
+                                                                title="Edit Sprint">
+                                                            <i class="fas fa-edit text-sm"></i>
+                                                        </button>
+                                                        <button type="button"
+                                                                onclick="deleteFutureSprint({{ $sprint->id }})"
+                                                                class="p-1.5 text-red-600 hover:bg-red-100 rounded transition"
+                                                                title="Delete Sprint">
+                                                            <i class="fas fa-trash text-sm"></i>
+                                                        </button>
+                                                    </div>
                                                 </div>
-                                                <p class="text-sm text-gray-600 mt-2">Goal: {{ $sprint->goal ?? 'No goal set' }}</p>
+                                                {{-- Goal: Chỉ hiển thị nếu có goal HOẶC chưa có User Stories --}}
+                                                @if($sprint->goal || $sprint->tasks->count() === 0)
+                                                    <p class="text-sm text-gray-600 mt-2">
+                                                        Goal: {{ $sprint->goal ?? 'No goal set' }}
+                                                    </p>
+                                                @endif
                                             </div>
 
                                             {{-- Stats --}}
@@ -277,6 +298,7 @@
     {{-- MODALS (kept at root for overlay) --}}
     @include('pages.product-backlog.partials.create-epic-modal')
     @include('pages.product-backlog.partials.create-future-sprint-modal')
+    @include('pages.product-backlog.partials.edit-future-sprint-modal')
 
 
 

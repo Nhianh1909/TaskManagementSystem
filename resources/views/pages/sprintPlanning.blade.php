@@ -47,22 +47,55 @@
                     </div>
                 @else
                     <div class="space-y-6">
-                        @foreach($futureSprints as $fs)
-                            <div class="border rounded-xl p-4">
+                        @foreach($futureSprints as $index => $fs)
+                            @php
+                                // ✅ Chỉ cho phép start sprint đầu tiên (index = 0)
+                                $isFirstSprint = $index === 0;
+                            @endphp
+                            <div class="border rounded-xl p-4 {{ !$isFirstSprint ? 'opacity-60 bg-gray-50' : '' }}">
                                 <div class="flex items-start justify-between gap-4">
                                     <div class="flex-1">
-                                        <h3 class="text-lg font-semibold text-gray-800">{{ $fs->name }}</h3>
+                                        <div class="flex items-center gap-2">
+                                            <h3 class="text-lg font-semibold text-gray-800">{{ $fs->name }}</h3>
+                                            @if($isFirstSprint)
+                                                <span class="px-2 py-1 text-xs font-semibold bg-green-100 text-green-700 rounded-full">
+                                                    Next
+                                                </span>
+                                            @else
+                                                <span class="px-2 py-1 text-xs font-semibold bg-gray-200 text-gray-600 rounded-full">
+                                                    Queued
+                                                </span>
+                                            @endif
+                                        </div>
                                         <p class="text-sm text-gray-500">{{ $fs->goal ?? 'No goal set' }}</p>
                                         <div class="mt-3 text-sm text-gray-600 flex items-center gap-6">
                                             <span>{{ $fs->tasks->count() }} stories</span>
                                             <span>{{ $fs->tasks->sum('storyPoints') }} pts</span>
                                         </div>
+
+                                        {{-- ✅ Thông báo cho sprint đang chờ --}}
+                                        @if(!$isFirstSprint)
+                                            <div class="mt-2 text-xs text-amber-600 flex items-center gap-1">
+                                                <i class="fas fa-info-circle"></i>
+                                                <span>Please complete previous sprints first</span>
+                                            </div>
+                                        @endif
                                     </div>
                                     <div class="flex-shrink-0">
-                                        <form action="{{ route('future-sprints.activate', $fs->id) }}" method="POST" onsubmit="return confirm('Bắt đầu sprint này? Các sprint khác sẽ được tắt.');">
-                                            @csrf
-                                            <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700">Start this Sprint</button>
-                                        </form>
+                                        @if($isFirstSprint)
+                                            {{-- ✅ Chỉ sprint đầu tiên mới có button active --}}
+                                            <form action="{{ route('future-sprints.activate', $fs->id) }}" method="POST" onsubmit="return confirm('Bắt đầu sprint này? Các sprint khác sẽ được tắt.');">
+                                                @csrf
+                                                <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 font-semibold">
+                                                    <i class="fas fa-play mr-1"></i>Start this Sprint
+                                                </button>
+                                            </form>
+                                        @else
+                                            {{-- ✅ Sprint khác bị disable --}}
+                                            <button disabled class="px-4 py-2 bg-gray-300 text-gray-500 rounded-md cursor-not-allowed font-semibold">
+                                                <i class="fas fa-lock mr-1"></i>Locked
+                                            </button>
+                                        @endif
                                     </div>
                                 </div>
                                 @if($fs->tasks->count() > 0)

@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Models\Tasks;
 use App\Models\Sprints;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -17,7 +18,7 @@ class SprintsController extends Controller
         $this->authorize('plan-sprints');
 
         $user = Auth::user();//tạo biến user lưu thông tin người dùng đã đăng nhập
-        $team = $user->teams()->first(); // với user hiện tại, lấy ra team mà user đó đang tham gia
+        $team = $user->team()->first(); // với user hiện tại, lấy ra team mà user đó đang tham gia
 
         if (!$team) {
             return redirect()->route('dashboard')->with('error', 'Bạn chưa thuộc team nào.');
@@ -28,11 +29,13 @@ class SprintsController extends Controller
         // Khi chưa có sprint đang chạy: liệt kê các Future Sprints (status=planning, is_active=false)
         $futureSprints = collect();
         if (!$activeSprint) {
+            // ✅ Sắp xếp theo created_at ASC (sprint cũ nhất → mới nhất)
+            // Lý do: Sprints phải chạy tuần tự, sprint tạo trước phải start trước
             $futureSprints = $team->sprints()
                 ->where('status', 'planning')
                 ->where('is_active', false)
                 ->with(['tasks' => function($q) { $q->orderBy('priority'); }])
-                ->orderByDesc('created_at')
+                ->orderBy('created_at', 'asc') // ✅ Đổi từ DESC sang ASC
                 ->get();
         }
 
@@ -158,6 +161,10 @@ class SprintsController extends Controller
             $sprintModel->status = 'inProgress';
             if (empty($sprintModel->start_date)) {
                 $sprintModel->start_date = now();
+            }
+            // Set end_date nếu chưa có (mặc định 2 tuần = 14 ngày)
+            if (empty($sprintModel->end_date)) {
+                $sprintModel->end_date = now()->addDays(14);
             }
             $sprintModel->save();
 

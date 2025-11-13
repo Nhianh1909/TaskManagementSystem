@@ -48,7 +48,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/product-backlog', [TasksController::class, 'productBacklog'])->name('product.backlog');
     //future sprint routes
     Route::post('/future-sprints', [TasksController::class, 'storeFutureSprint'])->name('future-sprints.store');
-    Route::patch('/future-sprints/{sprint}', [TasksController::class, 'updateFutureSprint'])->name('future-sprints.update');
+    Route::get('/future-sprints/{sprint}', [TasksController::class, 'showFutureSprint'])->name('future-sprints.show');
+    Route::put('/future-sprints/{sprint}', [TasksController::class, 'updateFutureSprint'])->name('future-sprints.update');
     Route::delete('/future-sprints/{sprint}', [TasksController::class, 'destroyFutureSprint'])->name('future-sprints.destroy');
     // Activate a planned future sprint
     Route::post('/future-sprints/{sprint}/activate', [SprintsController::class, 'start'])->name('future-sprints.activate');
