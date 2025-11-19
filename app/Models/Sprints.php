@@ -49,6 +49,11 @@ class Sprints extends Model
         'status',
     ];
 
+    protected $casts = [
+        'start_date' => 'datetime',
+        'end_date' => 'datetime',
+    ];
+
     /**
      * Mối quan hệ một-nhiều: Một Sprint có nhiều Task.
      */

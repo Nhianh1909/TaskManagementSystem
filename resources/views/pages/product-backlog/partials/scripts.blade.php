@@ -616,18 +616,18 @@
         if(form){
             form.addEventListener('submit', async function(e){
                 e.preventDefault(); //ngăn chặn hành vi submit mặc định
-                
+
                 //Lấy dữ liệu từ form
                 const formData = new FormData(this);
                 const startDate = formData.get('start_date');
                 const endDate = formData.get('end_date');
-                
+
                 // ✅ Validation phía client
                 if (startDate && endDate && new Date(endDate) < new Date(startDate)) {
                     alert('End date must be after or equal to start date!');
                     return;
                 }
-                
+
                 const data = {
                     name: formData.get('name'),
                     goal: formData.get('goal'),
@@ -665,14 +665,14 @@
             })
         }
     })
-    
+
     // ✅ Open Edit Future Sprint Modal
     async function openEditFutureSprintModal(sprintId) {
         try {
             // Fetch sprint data
             const response = await fetch(`/future-sprints/${sprintId}`);
             const sprint = await response.json();
-            
+
             if (response.ok) {
                 // Populate form
                 document.getElementById('edit-sprint-id').value = sprint.id;
@@ -680,7 +680,7 @@
                 document.getElementById('edit-sprint-goal').value = sprint.goal || '';
                 document.getElementById('edit-sprint-start-date').value = sprint.start_date || '';
                 document.getElementById('edit-sprint-end-date').value = sprint.end_date || '';
-                
+
                 // Show modal
                 document.getElementById('edit-future-sprint-modal').classList.remove('hidden');
             } else {
@@ -691,20 +691,20 @@
             alert('Error loading sprint data');
         }
     }
-    
+
     // ✅ Close Edit Future Sprint Modal
     function closeEditFutureSprintModal() {
         document.getElementById('edit-future-sprint-modal').classList.add('hidden');
         document.getElementById('edit-future-sprint-form').reset();
     }
-    
+
     // ✅ Handle Edit Form Submit
     document.addEventListener('DOMContentLoaded', function() {
         const editForm = document.getElementById('edit-future-sprint-form');
         if (editForm) {
             editForm.addEventListener('submit', async function(e) {
                 e.preventDefault();
-                
+
                 const sprintId = document.getElementById('edit-sprint-id').value;
                 const formData = new FormData(this);
                 const data = {
@@ -713,7 +713,7 @@
                     start_date: formData.get('start_date') || null,
                     end_date: formData.get('end_date') || null,
                 };
-                
+
                 try {
                     const response = await fetch(`/future-sprints/${sprintId}`, {
                         method: 'PUT',
@@ -723,9 +723,9 @@
                         },
                         body: JSON.stringify(data)
                     });
-                    
+
                     const result = await response.json();
-                    
+
                     if (response.ok) {
                         alert('Future Sprint updated successfully!');
                         closeEditFutureSprintModal();
@@ -745,13 +745,13 @@
             });
         }
     });
-    
+
     // ✅ Delete Future Sprint
     async function deleteFutureSprint(sprintId) {
         if (!confirm('Are you sure you want to delete this Future Sprint? All stories will be moved back to Product Backlog.')) {
             return;
         }
-        
+
         try {
             const response = await fetch(`/future-sprints/${sprintId}`, {
                 method: 'DELETE',
@@ -760,9 +760,9 @@
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
                 }
             });
-            
+
             const result = await response.json();
-            
+
             if (response.ok) {
                 alert('Future Sprint deleted successfully!');
                 location.reload();
@@ -774,7 +774,7 @@
             alert('Error deleting Future Sprint');
         }
     }
-    
+
     // Toggle form gán sprint
     function toggleAssignSprintForm(storyId) {
   const el = document.getElementById('assign-sprint-form-' + storyId);

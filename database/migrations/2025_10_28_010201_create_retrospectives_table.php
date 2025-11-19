@@ -16,7 +16,8 @@ return new class extends Migration
             //liên kết với bảng sprints đã hoàn thành
             $table->foreignId('sprint_id')
                   ->constrained('sprints')
-                  ->onDelete('cascade');//khi xóa sprint thì xóa retrospective
+                  ->onDelete('cascade');//khi xóa sprint thì xóa
+            $table->boolean('is_locked')->default(false);
             //liên kết với team thực hiện sprint
             $table->foreignId('team_id')
                   ->constrained('teams')

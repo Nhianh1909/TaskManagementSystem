@@ -32,6 +32,10 @@ class Retrospective extends Model
     protected $fillable = [
         'sprint_id',
         'team_id',
+        'is_locked',
+    ];
+    protected $casts = [
+        'is_locked' => 'boolean',
     ];
     //lấy chỉ 1 sprint của cuộc họp này
     public function sprint()

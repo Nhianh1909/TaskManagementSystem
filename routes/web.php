@@ -65,13 +65,13 @@ Route::middleware('auth')->group(function () {
     Route::patch('/user-stories/{task}/assign-future-sprint', [TasksController::class, 'assignFutureSprint'])->name('user-stories.assignFutureSprint');
     Route::patch('/user-stories/{task}', [TasksController::class, 'updateUserStory'])->name('user-stories.update');
     Route::delete('/user-stories/{task}', [TasksController::class, 'destroyUserStory'])->name('user-stories.destroy');
-    
+
     // User Story Comments Routes
     Route::get('/user-stories/{task}/comments', [TasksCommentsController::class, 'index'])->name('user-stories.comments.index');
     Route::post('/user-stories/{task}/comments', [TasksCommentsController::class, 'store'])->name('user-stories.comments.store');
     Route::patch('/comments/{comment}', [TasksCommentsController::class, 'update'])->name('comments.update');
     Route::delete('/comments/{comment}', [TasksCommentsController::class, 'destroy'])->name('comments.destroy');
-    
+
     // Task Routes
     Route::get('/tasksboard', [TasksController::class, 'taskBoard'])->name('tasksboard');
     Route::get('/tasks', [TasksController::class, 'getTasks'])->name('tasks.index'); // Thêm để load subtasks
@@ -103,12 +103,24 @@ Route::middleware('auth')->group(function () {
     // Route::view('/product-backlog', 'pages.product-backlog')->name('product.backlog');
 
     // Retrospective Routes
-    Route::get('/retrospective', [RetrospectiveController::class, 'index'])->name('retrospective');
-    Route::post('/retrospective/items', [RetrospectiveController::class, 'storeItem'])->name('retrospective.items.store');
-    Route::patch('/retrospective/items/{id}', [RetrospectiveController::class, 'updateItem'])->name('retrospective.items.update');
-    Route::delete('/retrospective/items/{id}', [RetrospectiveController::class, 'deleteItem'])->name('retrospective.items.delete');
-    Route::post('/retrospective/items/{id}/backlog', [RetrospectiveController::class, 'addToBacklog'])->name('retrospective.items.backlog');
-    Route::post('/retrospective/end', [RetrospectiveController::class, 'endMeeting'])->name('retrospective.end');
+    Route::get('/retrospective', [RetrospectiveController::class, 'index'])->name('retrospective.index');
+    Route::get('/retrospective/{retro}/items', [RetrospectiveController::class, 'getItems'])
+         ->name('retrospective.items.index');
+    // 1. Route POST để LƯU item MỚI
+    // {retro} là ID của buổi họp mà chúng ta đang thêm item vào
+    Route::post('/retrospective/{retro}/items', [RetrospectiveController::class, 'storeItem'])
+         ->name('retrospective.items.store');
+    // {item} là ID của item chúng ta muốn xóa
+    Route::delete('/retrospective/items/{item}', [RetrospectiveController::class, 'destroyItem'])
+         ->name('retrospective.items.destroy');
+    Route::patch('/retrospective/items/{item}', [RetrospectiveController::class, 'updateItem'])->name('retrospective.items.update');
+    // Route KHÓA cuộc họp (End Meeting)
+    Route::post('/retrospective/{retro}/lock', [RetrospectiveController::class, 'lockRetrospective'])
+         ->name('retrospective.lock');
+
+    // Route MỞ LẠI cuộc họp (Re-open)
+    Route::post('/retrospective/{retro}/unlock', [RetrospectiveController::class, 'unlockRetrospective'])
+         ->name('retrospective.unlock');
 
     // Logout Route
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');

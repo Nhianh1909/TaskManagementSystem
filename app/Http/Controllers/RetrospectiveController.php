@@ -3,11 +3,14 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use App\Models\Sprints;
+use App\Models\Retrospective;
+use App\Models\RetrospectiveItem;
 use Illuminate\Support\Facades\Auth;
 
 /**
  * Controller quản lý trang Retrospective Meeting (Buổi họp hồi cố)
- * 
+ *
  * Chức năng chính:
  * - Hiển thị 3 cột: Went Well (Tốt), To Improve (Cần cải thiện), Action Items (Hành động)
  * - Cho phép thành viên thêm/sửa/xóa các item feedback
@@ -16,129 +19,216 @@ use Illuminate\Support\Facades\Auth;
  */
 class RetrospectiveController extends Controller
 {
-    /**
-     * Hiển thị trang Retrospective Meeting
-     * 
-     * @return \Illuminate\View\View|\Illuminate\Http\RedirectResponse
-     */
-    public function index()
+    // /**
+    //  * Hiển thị trang Retrospective Meeting
+    //  *
+    //  * @return \Illuminate\View\View|\Illuminate\Http\RedirectResponse
+    //  */
+    public function index(Request $request)
     {
-        // Lấy thông tin user đang đăng nhập
         $user = Auth::user();
-        
-        // Lấy team đầu tiên mà user tham gia
         $team = $user->teams()->first();
 
-        // Kiểm tra xem user có thuộc team nào không
+        // Kiểm tra nếu người dùng không thuộc team nào
         if (!$team) {
-            return redirect()->route('dashboard')->with('error', 'Bạn phải thuộc một team để xem trang retrospective.');
+            return redirect()->route('dashboard')->with('error', 'Bạn cần tham gia một team để truy cập Retrospective Meeting.');
+        }
+        // Lấy vai trò
+        $userRoleInTeam = $team->users()->find($user->id)?->pivot->roleInTeam;
+        // Lấy tất cả sprint đã hoàn thành để làm dropdown
+        $allSprints = $team->sprints()->where('status', 'completed')->orderBy('end_date','desc')->get();
+
+        //xác định xem sprint nào được chọn
+        $activeSprint =null;
+        if($request->query('sprint_id')){
+            //nếu user lọc theo sprint
+            $activeSprint = Sprints::where('id', $request->query('sprint_id'))
+                ->where('team_id', $team->id)
+                ->where('status', 'completed')
+                ->first();
+        }else{
+            //nếu user không lọc theo sprint, lấy sprint gần nhất
+            $activeSprint = $allSprints->first();
+        }
+        // Khởi tạo mảng rỗng
+        // $likedItems = collect();
+        // $toImproveItems = collect();
+        // $actionItems = collect();
+        $retro = null;
+
+        // Chỉ khi tìm thấy sprint thì mới lấy data
+        if ($activeSprint) {
+            // Tìm hoặc tạo buổi họp
+            $retro = Retrospective::firstOrCreate(
+                ['sprint_id' => $activeSprint->id],
+                ['team_id' => $team->id, 'is_locked' => false]
+            );
+
+            // Đặt tên biến khớp với file UI bạn cung cấp
+            // $likedItems = $retro->items()->where('type', 'good')->with('user')->get();
+            // $toImproveItems = $retro->items()->where('type', 'bad')->with('user')->get();
+            // $actionItems = $retro->items()->where('type', 'action')->with('user')->get();
         }
 
-        // Lấy vai trò của user trong team (scrum_master, product_owner, developer)
-        $userRoleInTeam = $team->users()->find($user->id)?->pivot->roleInTeam;
 
-        // ===== DỮ LIỆU MẪU CHO 3 CỘT =====
-        // TODO: Thay thế bằng dữ liệu thật từ database khi tích hợp model Retrospective
-        
-        // Cột 1: Những điều làm tốt (Went Well 👍)
-        $likedItems = [
-            ['id' => 1, 'content' => 'Team collaboration has significantly improved this sprint.', 'creator' => 'Alice', 'votes' => 5],
-            ['id' => 2, 'content' => 'Successfully completed sprint goals ahead of schedule.', 'creator' => 'David', 'votes' => 3],
-        ];
-
-        // Cột 2: Những điều cần cải thiện (To Improve ⚙️)
-        $toImproveItems = [
-            ['id' => 3, 'content' => 'Communication between Dev and QA needs improvement, leading to delays.', 'creator' => 'Bob', 'votes' => 4],
-            ['id' => 4, 'content' => 'Insufficient unit test coverage in critical modules.', 'creator' => 'David', 'votes' => 2],
-        ];
-
-        // Cột 3: Các hành động cải tiến (Action Items 🚀)
-        $actionItems = [
-            ['id' => 5, 'content' => 'Implement daily 15-minute sync-up meetings between Dev QA teams.', 'creator' => 'Alice', 'votes' => 0],
-            ['id' => 6, 'content' => 'Allocate 2 hours per sprint for increasing Dev QA coverage.', 'creator' => 'Scrum Master', 'votes' => 0],
-        ];
-
-        // Trả về view với dữ liệu
+        // Trả về view với đầy đủ dữ liệu
         return view('pages.retrospective', compact(
-            'likedItems',
-            'toImproveItems',
-            'actionItems',
+            'retro',
+            // 'likedItems',
+            // 'toImproveItems',
+            // 'actionItems',
+            'allSprints',
+            'activeSprint',
             'userRoleInTeam',
-            'team'
         ));
     }
-
-    /**
-     * Lưu một item retrospective mới
-     * 
-     * @param Request $request - Chứa 'content' (nội dung) và 'type' (loại: liked/improve/action)
-     * @return \Illuminate\Http\JsonResponse
-     */
-    public function storeItem(Request $request)
+    public function getItems(Retrospective $retro)
     {
-        // Validate dữ liệu đầu vào
-        $validated = $request->validate([
-            'content' => 'required|string|max:500',  // Nội dung bắt buộc, tối đa 500 ký tự
-            'type' => 'required|in:liked,improve,action',  // Loại phải là: liked, improve hoặc action
-        ]);
+        $user = Auth::user();
+        $items = $retro->items()->with('user')
+                        ->orderBy('created_at', 'asc') // Sắp xếp cũ -> mới
+                        ->get();
 
-        // TODO: Lưu vào database khi đã tích hợp model Retrospective
-        // VD: RetrospectiveItem::create([...])
-        
-        return response()->json([
-            'message' => 'Thêm item thành công!',
-            'item' => [
-                'id' => rand(100, 999),  // ID tạm, thay bằng ID từ DB sau
-                'content' => $validated['content'],
-                'creator' => Auth::user()->name,
-                'votes' => 0,
-            ]
-        ], 201);  // 201 = Created
+        // Trả về dạng JSON
+        return response()->json($items);
     }
 
-    /**
-     * Cập nhật một item đã có
-     * 
-     * @param Request $request
-     * @param int $id - ID của item cần update
-     * @return \Illuminate\Http\JsonResponse
-     */
-    public function updateItem(Request $request, $id)
+    // /**
+    //  * Lưu một item retrospective mới
+    //  *
+    //  * @param Request $request - Chứa 'contenst' (nội dung) và 'type' (loại: liked/improve/action)
+    //  * @return \Illuminate\Http\JsonResponse
+    //  */
+    public function storeItem(Request $request, Retrospective $retro)
     {
-        // Validate nội dung mới
-        $validated = $request->validate([
-            'content' => 'required|string|max:500',
-        ]);
+        $user = Auth::user();
 
-        // TODO: Tìm item trong DB và update
-        // VD: $item = RetrospectiveItem::findOrFail($id);
-        //     $item->update($validated);
-        
-        return response()->json([
-            'message' => 'Cập nhật item thành công!',
+        // 1. Kiểm tra bảo mật: Cuộc họp đã bị khóa chưa?
+        if ($retro->is_locked) {
+            return redirect()->back()->with('error', 'Buổi họp này đã bị khóa.');
+        }
+        // 2. Kiểm tra bảo mật: User có thuộc team này không?
+        if ($user->team()->id !== $retro->team_id) {
+            return redirect()->back()->with('error', 'Bạn không có quyền thêm item.');
+        }
+        // 3. Validate dữ liệu (Đảm bảo 'type' là 1 trong 3 giá trị)
+        $validated = $request->validate([
+            'content' => 'required|string|max:2000',
+            'type' => ['required', \Illuminate\Validation\Rule::in(['good', 'bad', 'action'])],
         ]);
+        // 4. Tạo item mới
+        RetrospectiveItem::create([
+            'retrospective_id' => $retro->id,
+            'user_id' => $user->id,
+            'content' => $validated['content'],
+            'type' => $validated['type'],
+        ]);
+        // Trả về JSON
+        return redirect()->back()->with('success', 'Thêm item thành công!');
     }
 
-    /**
-     * Xóa một item
-     * 
-     * @param int $id - ID của item cần xóa
-     * @return \Illuminate\Http\JsonResponse
-     */
-    public function deleteItem($id)
+
+    public function updateItem(Request $request, RetrospectiveItem $item)
     {
-        // TODO: Xóa item khỏi database
-        // VD: RetrospectiveItem::findOrFail($id)->delete();
-        
+        $user = Auth::user();
+        $retro = $item->retrospective;
+        // 1. Kiểm tra bảo mật: Cuộc họp đã khóa chưa?
+        if ($retro->is_locked) {
+            return response()->json(['message' => 'Buổi họp này đã bị khóa.'], 403);
+        }
+        // 2. Kiểm tra quyền: Chỉ người tạo item mới được sửa (PO/SM cũng không nên sửa lời người khác)
+        if ($item->user_id !== $user->id) {
+            return response()->json(['message' => 'Bạn chỉ có thể sửa item của chính mình.'], 403);
+        }
+        // 3. Validate dữ liệu
+        $validated = $request->validate([
+            'content' => 'required|string|max:2000',
+        ]);
+
+        // 4. Cập nhật
+        $item->update([
+            'content' => $validated['content']
+        ]);
+
+        // 4. Quay lại trang cũ với thông báo thành công (Flash Message)
+        return redirect()->back()->with('success', 'Cập nhật item thành công!');
+    }
+
+
+    public function destroyItem(RetrospectiveItem $item)
+    {
+        $user = Auth::user();
+        $team = $user->team();
+        $userRoleInTeam = $team->users()->find($user->id)?->pivot->roleInTeam;
+
+        // Lấy buổi họp (retro) từ item
+        $retro = $item->retrospective;
+
+        // 1. Kiểm tra bảo mật: Cuộc họp đã bị khóa chưa?
+        if ($retro->is_locked) {
+            return redirect()->back()->with('error', 'Buổi họp này đã bị khóa.');
+        }
+
+        // 2. Kiểm tra quyền: Chỉ chủ item, PO, hoặc SM mới được xóa
+        $isOwner = ($item->user_id === $user->id);
+        $isAdmin = in_array($userRoleInTeam, ['product_owner', 'scrum_master']);
+
+        if (!$isOwner && !$isAdmin) {
+            return redirect()->back()->with('error', 'Bạn không có quyền xóa item này.');
+        }
+
+        // 3. Xóa item
+        $item->delete();
+
+        // 4. Quay lại trang cũ
         return response()->json([
             'message' => 'Xóa item thành công!',
         ]);
     }
+    // === HÀM 1: KẾT THÚC CUỘC HỌP (KHÓA) ===
+    public function lockRetrospective(Request $request, Retrospective $retro)
+    {
+        // 1. Kiểm tra quyền Admin (PO hoặc SM)
+        if (!$this->checkAdminPermission()) {
+            return redirect()->back()->with('error', 'Bạn không có quyền kết thúc cuộc họp.');
+        }
+
+        // 2. Cập nhật trạng thái
+        $retro->update(['is_locked' => true]);
+
+        return redirect()->back()->with('success', 'Cuộc họp đã kết thúc và được khóa lại.');
+    }
+
+    // === HÀM 2: MỞ LẠI CUỘC HỌP (MỞ KHÓA) ===
+    public function unlockRetrospective(Request $request, Retrospective $retro)
+    {
+        // 1. Kiểm tra quyền Admin
+        if (!$this->checkAdminPermission()) {
+            return redirect()->back()->with('error', 'Bạn không có quyền mở lại cuộc họp.');
+        }
+
+        // 2. Cập nhật trạng thái
+        $retro->update(['is_locked' => false]);
+
+        return redirect()->back()->with('success', 'Cuộc họp đã được mở lại.');
+    }
+
+    // === HÀM PHỤ: CHECK QUYỀN ADMIN (PO/SM) ===
+    private function checkAdminPermission()
+    {
+        $user = Auth::user();
+        $team = $user->team();
+        if (!$team) return false;
+
+        $role = $team->users()->find($user->id)?->pivot->roleInTeam;
+        return in_array($role, ['product_owner', 'scrum_master']);
+    }
+
 
     /**
      * Thêm Action Item vào Product Backlog
      * CHỈ SCRUM MASTER MỚI ĐƯỢC DÙNG CHỨC NĂNG NÀY
-     * 
+     *
      * @param Request $request
      * @param int $id - ID của action item
      * @return \Illuminate\Http\JsonResponse
@@ -163,7 +253,7 @@ class RetrospectiveController extends Controller
         //     'sprint_id' => null,
         //     ...
         // ]);
-        
+
         return response()->json([
             'message' => 'Đã thêm Action Item vào Product Backlog thành công!',
         ]);
@@ -171,14 +261,14 @@ class RetrospectiveController extends Controller
 
     /**
      * Kết thúc buổi Retrospective Meeting
-     * 
+     *
      * @return \Illuminate\Http\RedirectResponse
      */
     public function endMeeting()
     {
         // TODO: Đánh dấu buổi họp là đã hoàn thành, lưu kết quả cuối cùng vào DB
         // VD: $retrospective->update(['status' => 'completed', 'ended_at' => now()]);
-        
+
         return redirect()->route('dashboard')->with('success', 'Buổi retrospective đã kết thúc thành công!');
     }
 }

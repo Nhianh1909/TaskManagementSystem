@@ -14,12 +14,12 @@
 
     {{-- Hiển thị thông báo (nếu có) --}}
     @if(session('success'))
-        <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative mb-4" role="alert">
+        <div class="flash-message bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative mb-4" role="alert">
             <span class="block sm:inline">{{ session('success') }}</span>
         </div>
     @endif
     @if(session('error'))
-        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+        <div class="flash-message bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
             <span class="block sm:inline">{{ session('error') }}</span>
         </div>
     @endif
@@ -114,6 +114,22 @@
 </div>
 
 <script>
+
+    const alerts = document.querySelectorAll('.flash-message');
+    if(alerts.length>0){
+        setTimeout(()=>{
+            alerts.forEach(alert=>{
+                //tạo hiệu ứng mờ dần
+                alert.style.transition = "opacity 0.5s ease";
+                alert.style.opacity = '0';
+
+                //sau khi mờ xong 0.5s thì xóa hẳn khỏi DOM
+                setTimeout(()=>{
+                    alert.remove();
+                }, 500);
+            });
+        }, 2000); // 2 giây
+    }
     function openAddMemberModal() {
         document.getElementById('addTeamModal').classList.remove('hidden');
         document.getElementById('addTeamModal').classList.add('flex');
@@ -122,6 +138,7 @@
         document.getElementById('addTeamModal').classList.add('hidden');
         document.getElementById('addTeamModal').classList.remove('flex');
     }
+
 </script>
 @endif
 @endsection
