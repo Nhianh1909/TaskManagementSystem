@@ -9,6 +9,7 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\RetrospectiveController;
 use App\Http\Controllers\TasksCommentsController;
 use App\Http\Controllers\TestController;
+use App\Http\Controllers\UserProfileController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
@@ -99,6 +100,10 @@ Route::middleware('auth')->group(function () {
     // Other Routes
     Route::get('/reports', [ReportController::class, 'index'])->name('reports');
     Route::view('/settings', 'pages.settings')->name('settings');
+    
+    // User Profile Route
+    Route::get('/profile', [UserProfileController::class, 'index'])->name('user.profile');
+    
     // Product Backlog (UI demo)
     // Route::view('/product-backlog', 'pages.product-backlog')->name('product.backlog');
 

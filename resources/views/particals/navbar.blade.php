@@ -25,12 +25,14 @@
 
                 @auth
                     <div class="relative flex items-center space-x-2">
-                        <img src="https://ui-avatars.com/api/?name={{ urlencode(Auth::user()->name) }}&background=007BFF&color=fff"
-                             alt="User Avatar"
-                             class="w-8 h-8 rounded-full">
-                        <span class="text-sm font-medium text-gray-700 mobile-hidden">
-                            {{ Auth::user()->name }}
-                        </span>
+                        <a href="{{ route('user.profile') }}" class="flex items-center space-x-2 hover:opacity-80 transition-opacity">
+                            <img src="https://ui-avatars.com/api/?name={{ urlencode(Auth::user()->name) }}&background=007BFF&color=fff"
+                                 alt="User Avatar"
+                                 class="w-8 h-8 rounded-full cursor-pointer">
+                            <span class="text-sm font-medium text-gray-700 mobile-hidden">
+                                {{ Auth::user()->name }}
+                            </span>
+                        </a>
 
                         {{-- Form logout --}}
                         <form action="{{ route('logout') }}" method="POST" class="inline">
