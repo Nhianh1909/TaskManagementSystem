@@ -82,6 +82,13 @@ Route::middleware('auth')->group(function () {
     Route::delete('/tasks/{task}', [TasksController::class, 'destroy'])->name('tasks.destroy');
     Route::patch('/tasks/{task}/status', [TasksController::class, 'updateStatus'])->name('tasks.updateStatus');
 
+    // Task Status (Column) Management Routes
+    Route::get('/task-statuses', [App\Http\Controllers\TaskStatusController::class, 'index'])->name('task-statuses.index');
+    Route::post('/task-statuses', [App\Http\Controllers\TaskStatusController::class, 'store'])->name('task-statuses.store');
+    Route::post('/task-statuses/reorder', [App\Http\Controllers\TaskStatusController::class, 'reorder'])->name('task-statuses.reorder');
+    Route::post('/task-statuses/{taskStatus}/move-tasks', [App\Http\Controllers\TaskStatusController::class, 'moveTasks'])->name('task-statuses.move-tasks');
+    Route::delete('/task-statuses/{taskStatus}', [App\Http\Controllers\TaskStatusController::class, 'destroy'])->name('task-statuses.destroy');
+
     // Task Comments
     Route::get('/tasks/{task}/comments', [TasksCommentsController::class, 'index'])->name('tasks.comments.index');
     Route::post('/tasks/{task}/comments', [TasksCommentsController::class, 'store'])->name('tasks.comments.store');

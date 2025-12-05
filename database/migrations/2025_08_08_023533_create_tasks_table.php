@@ -28,7 +28,8 @@ return new class extends Migration
             $table->text('description')->nullable();
             $table->enum('priority', ['low', 'medium', 'high'])->default('medium');
             $table->integer('storyPoints')->nullable();//điểm công việc
-            $table->enum('status', ['toDo', 'inProgress', 'done'])->default('toDo');
+            // $table->enum('status', ['toDo', 'inProgress', 'done'])->default('toDo');
+            $table->integer('order_index')->nullable();
             $table->timestamps();
         });
     }

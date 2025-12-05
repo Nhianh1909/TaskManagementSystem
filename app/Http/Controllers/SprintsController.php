@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Models\Tasks;
 use App\Models\Sprints;
+use App\Models\TaskStatus;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -66,7 +67,8 @@ class SprintsController extends Controller
             }
 
             // Hủy các sprint cũ đang hoạt động trong db để tạo sprint mới
-            $team->sprints()->where('is_active', true)->update(['is_active' => false]);
+            $team->sprints()->where('is_active', true)->update(['is_active' => false, 'status' => 'completed', // Hoặc 'closed' để báo hiệu kết thúc
+            'end_date' => now()]);
 
             // Tạo sprint mới
             $sprint = $team->sprints()->create([
@@ -112,10 +114,32 @@ class SprintsController extends Controller
         //tiếp theo bắt đầu transaction để đảm bảo tính toàn vẹn dữ liệu
         DB::beginTransaction();
         try {
-            // Đưa các task chưa "Done" trở lại Product Backlog nếu như user đang đăng nhập là PO hoặc SM và sprint của team
+            // ✅ FIX: Dùng status_id thay vì status (enum cũ)
+            // Tìm cột "To Do" để gán các task chưa xong
+            $toDoStatus = TaskStatus::where('team_id', $team->id)
+                ->where('name', 'To Do')
+                ->first();
+            
+            // Đưa các task chưa "done" (is_done=false) trở lại Product Backlog
             $activeSprint->tasks()
-                ->where('status', '!=', 'done')
-                ->update(['sprint_id' => null, 'status' => 'toDo']);
+                ->with('status')
+                ->whereHas('status', function ($q) {
+                    $q->where('is_done', false);
+                })
+                ->update([
+                    'sprint_id' => null,
+                    'status_id' => $toDoStatus ? $toDoStatus->id : null,
+                    'assigned_to' => null,
+                    'completed_at' => null
+                ]);
+            
+            // ✅ FIX: XÓA các task ĐÃ xong (is_done=true)
+            $activeSprint->tasks()
+                ->with('status')
+                ->whereHas('status', function ($q) {
+                    $q->where('is_done', true);
+                })
+                ->delete();
 
             // Hủy kích hoạt sprint
             $activeSprint->is_active = false;

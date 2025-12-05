@@ -66,9 +66,14 @@ class Tasks extends Model
         'sprint_id',
         'epic_id',
         'parent_id',
-        'status',
+        'status_id',    // 🔥 MỚI: Thay cho 'status'
         'order_index',
+        'completed_at', // 🔥 MỚI: Để vẽ Burndown Chart chính xác
     ];
+    public function status()
+    {
+        return $this->belongsTo(TaskStatus::class, 'status_id');
+    }
 
     /**
      * Mối quan hệ một-một: Task này được giao cho User nào.

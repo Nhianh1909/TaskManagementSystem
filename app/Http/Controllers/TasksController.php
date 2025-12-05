@@ -8,7 +8,7 @@ use App\Models\Tasks;
 use App\Models\TasksComments;
 use App\Models\User;
 use App\Models\Epics;
-
+use App\Models\TaskStatus;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
@@ -35,18 +35,26 @@ class TasksController extends Controller
             $members = $team->users()->count();//lấy ra các users có trong team và đếm nó lưu vào biến members
             //nếu có sprint đang hoạt động thì ta lấy các task trong sprint đó để tính tiến độ
             if ($activeSprint) {
-                $sprintTasks = $activeSprint->tasks()->get();//lây các task trong sprint đang hoạt động
-                $taskCounts = $sprintTasks->countBy('status');//lấy số lượng task theo từng trạng thái sau đó gôm lại vào cột taskCounts
-                //lưu số lượng task theo từng trạng thái vào biến sprintProgress
-                $sprintProgress['done'] = $taskCounts->get('done', 0);
-                $sprintProgress['inProgress'] = $taskCounts->get('inProgress', 0);
-                $sprintProgress['toDo'] = $taskCounts->get('toDo', 0);
-                //luwu số lượng task đang tiến hành vào biến tasksInProgress
-                $tasksInProgress = $sprintProgress['inProgress'];
-                //lấy các task đã hoàn thành trong ngày hôm nay
+                // ✅ FIX: Load tasks với quan hệ status để count theo is_done
+                $sprintTasks = $activeSprint->tasks()->with('status')->get();
+
+                // Count tasks theo loại status
+                $doneTasks = $sprintTasks->filter(fn($t) => $t->status && $t->status->is_done)->count();
+                $todoTasks = $sprintTasks->filter(fn($t) => $t->status && $t->status->name === 'To Do')->count();
+                $inProgressTasks = $sprintTasks->count() - $doneTasks - $todoTasks; // Các cột còn lại
+
+                $sprintProgress['done'] = $doneTasks;
+                $sprintProgress['inProgress'] = $inProgressTasks;
+                $sprintProgress['toDo'] = $todoTasks;
+
+                $tasksInProgress = $inProgressTasks;
+
+                //lấy các task đã hoàn thành trong ngày hôm nay (có completed_at)
                 $tasksCompletedToday = $sprintTasks
-                    ->where('status', 'done')
-                    ->where('updated_at', '>=', now()->startOfDay())
+                    ->filter(function($task) {
+                        return $task->completed_at &&
+                               $task->completed_at >= now()->startOfDay();
+                    })
                     ->count();
             }
         }
@@ -636,6 +644,24 @@ class TasksController extends Controller
         // Lấy sprint đang hoạt động của team
         $activeSprint = $team->sprints()->where('is_active', true)->first();
         // dd($activeSprint->toArray());
+
+        // 🔥 THÊM: Lấy danh sách cột động từ task_statuses VÀ eager load tasks
+        $columns = TaskStatus::where('team_id', $team->id)
+            ->orderBy('order_index', 'asc')
+            ->with(['tasks' => function($query) use ($activeSprint) {
+                // Chỉ lấy task thuộc sprint hiện tại
+                if ($activeSprint) {
+                    $query->where('sprint_id', $activeSprint->id)
+                          ->with('assignee')
+                          ->withCount('comments')
+                          ->orderBy('order_index', 'asc');
+                } else {
+                    // Không có sprint thì không lấy task
+                    $query->whereNull('id');
+                }
+            }])
+            ->get();
+
         // Lấy các task trong Product Backlog (chưa thuộc sprint nào)
     $backlogTasks = Tasks::whereNull('sprint_id')
                  ->with('assignee')
@@ -644,7 +670,7 @@ class TasksController extends Controller
                              ->get();
         // dd($backlogTasks->toArray());
         // Lấy các task trong sprint đang hoạt động và lấy luôn cả người được gán cho task đó, false thì tạo ra 1 collection rỗng
-    $sprintTasks = $activeSprint ? $activeSprint->tasks()->with('assignee')->withCount('comments')->get() : collect();
+    $sprintTasks = $activeSprint ? $activeSprint->tasks()->with('assignee', 'status')->withCount('comments')->get() : collect();
 
          // Lấy danh sách thành viên trong team, loại trừ vai trò 'scrum_master'
         $teamMembers = $team->users()->wherePivot('roleInTeam', '!=', 'scrum_master')->get();
@@ -655,7 +681,8 @@ class TasksController extends Controller
             'sprintTasks',
             'activeSprint',
             'teamMembers',
-            'userRoleInTeam'
+            'userRoleInTeam',
+            'columns' // 🔥 THÊM columns
         ));
     }
 
@@ -672,12 +699,64 @@ class TasksController extends Controller
         if ($user->id !== $task->assigned_to && $userRoleInTeam !== 'scrum_master') {
             return response()->json(['message' => 'Bạn không có quyền thay đổi trạng thái của task này.'], 403);
         }
-        //sử dụng Rule để làm gọn hơn thay vì'status' => 'required|in:toDo,inProgress,done'
+
+        // 🔥 Validate status_id thay vì status
         $validated = $request->validate([
-            'status' => ['required', Rule::in(['toDo', 'inProgress', 'done'])],
+            'status_id' => 'required|exists:task_statuses,id',
         ]);
 
-        $task->update(['status' => $validated['status']]);
+        // 🔥 UPDATE: Logic tự động cập nhật completed_at nếu cột là "Done"
+        $newStatus = TaskStatus::find($validated['status_id']);
+        if ($newStatus && $newStatus->is_done) {
+            $task->update(['status_id' => $validated['status_id'], 'completed_at' => now()]);
+        } else {
+            // Nếu kéo ngược lại cột chưa xong -> xóa completed_at
+            $task->update(['status_id' => $validated['status_id'], 'completed_at' => null]);
+        }
+
+        // 🔄 Nếu là subtask: tự động cập nhật trạng thái hoàn thành của User Story cha
+        if ($task->parent_id) {
+            $parent = $task->parent()
+                ->with(['subTasks.status', 'status', 'sprint'])
+                ->first();
+
+            if ($parent) {
+                $teamId = optional($parent->sprint)->team_id;
+
+                // Kiểm tra tất cả subtasks đã done (dựa trên is_done hoặc completed_at)
+                $allSubtasksDone = $parent->subTasks->every(function ($st) {
+                    return ($st->status && $st->status->is_done) || $st->completed_at;
+                });
+
+                if ($allSubtasksDone) {
+                    // Gán US sang cột done (is_done=true) nếu có
+                    $doneStatus = TaskStatus::where('team_id', $teamId)
+                        ->where('is_done', true)
+                        ->orderBy('order_index')
+                        ->first();
+
+                    $update = ['completed_at' => now()];
+                    if ($doneStatus) {
+                        $update['status_id'] = $doneStatus->id;
+                    }
+                    $parent->update($update);
+                } else {
+                    // Nếu có subtask chưa xong: bỏ completed_at của US, đưa về cột chưa done nếu cần
+                    $update = ['completed_at' => null];
+                    if ($parent->status && $parent->status->is_done) {
+                        $fallbackStatus = TaskStatus::where('team_id', $teamId)
+                            ->where('is_done', false)
+                            ->orderBy('order_index')
+                            ->first();
+                        if ($fallbackStatus) {
+                            $update['status_id'] = $fallbackStatus->id;
+                        }
+                    }
+                    $parent->update($update);
+                }
+            }
+        }
+
         return response()->json(['message' => 'Cập nhật trạng thái task thành công!']);
     }
     //hàm này là hàm tạo task
@@ -694,7 +773,7 @@ class TasksController extends Controller
             return response()->json(['message' => 'Bạn không có quyền tạo task.'], 403);
         }
 
-        // ✅ LOGIC MỚI: Subtask KHÔNG được nhập storyPoints
+        // Subtask KHÔNG được nhập storyPoints
         // Lý do: Story Points chỉ nằm ở User Story (task cha)
         $validated = $request->validate([
             'title' => 'required|string|max:255',
@@ -704,8 +783,11 @@ class TasksController extends Controller
             'assigned_to' => 'nullable|exists:users,id',
             'parent_id' => 'nullable|exists:tasks,id', // Cho phép tạo subtask
             'sprint_id' => 'nullable|exists:sprints,id',
-            'status' => ['nullable', Rule::in(['toDo', 'inProgress', 'done'])],
+            'status_id' => 'nullable|exists:task_statuses,id', // 🔥 Thay status bằng status_id
         ]);
+
+        // 🔥 Lấy status mặc định (To Do) nếu không chọn
+        $defaultStatusId = TaskStatus::where('name', 'To Do')->value('id') ?? 1;
 
         $task = Tasks::create([
             'title' => $validated['title'],
@@ -716,7 +798,7 @@ class TasksController extends Controller
             'created_by' => Auth::id(),
             'parent_id' => $validated['parent_id'] ?? null,
             'sprint_id' => $validated['sprint_id'] ?? null,
-            'status' => $validated['status'] ?? 'toDo',
+            'status_id' => $validated['status_id'] ?? $defaultStatusId, // 🔥 Dùng status_id
         ]);
 
         return response()->json([
@@ -805,7 +887,7 @@ class TasksController extends Controller
         // nhưng khóa các trường khác (title, description, storyPoints, priority, assigned_to)
         $isUserStoryInSprint = (!$isSubtask && $task->sprint_id !== null);
 
-        // ✅ LOGIC MỚI: Subtask KHÔNG được sửa storyPoints
+        //Subtask KHÔNG được sửa storyPoints
         // Lý do: Story Points chỉ nằm ở User Story (task cha)
         if ($isUserStoryInSprint) {
             // Chỉ cho phép cập nhật trạng thái khi US đã vào sprint
@@ -821,7 +903,7 @@ class TasksController extends Controller
                 'description' => 'nullable|string',
                 'priority' => ['required', Rule::in(['low', 'medium', 'high'])],
                 'status' => ['nullable', Rule::in(['toDo', 'inProgress', 'done'])],
-                'storyPoints' => $isSubtask ? 'prohibited' : 'nullable|integer', // ✅ Cấm storyPoints nếu là subtask
+                'storyPoints' => $isSubtask ? 'prohibited' : 'nullable|integer', // Cấm storyPoints nếu là subtask
                 'assigned_to' => 'nullable|exists:users,id',
             ]);
             $updateData = $validated;

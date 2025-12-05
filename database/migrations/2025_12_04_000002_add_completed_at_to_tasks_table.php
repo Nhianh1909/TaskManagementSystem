@@ -12,7 +12,8 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('tasks', function (Blueprint $table) {
-            //  $table->integer('order_index')->nullable()->after('status');
+            // Thêm cột completed_at để tracking khi task hoàn thành (cho Burndown Chart)
+            $table->timestamp('completed_at')->nullable()->after('updated_at');
         });
     }
 
@@ -22,7 +23,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('tasks', function (Blueprint $table) {
-            // $table->dropColumn('order_index');
+            $table->dropColumn('completed_at');
         });
     }
 };

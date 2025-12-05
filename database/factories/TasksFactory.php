@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Models\TasksComments;
 use App\Models\Epics;
 use App\Models\Tasks;
+use App\Models\TaskStatus;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -20,6 +21,10 @@ class TasksFactory extends Factory
      */
     public function definition(): array
     {
+        // 1. Lấy ngẫu nhiên 1 ID từ bảng status thật
+        // Nếu bảng chưa có dữ liệu (lỗi), fallback về 1 để không crash
+        $statusId = TaskStatus::inRandomOrder()->value('id') ?? 1;
+
         return [
             'sprint_id'=>Sprints::inRandomOrder()->first()->id ?? Sprints::factory(),
             'created_by'=>User::inRandomOrder()->first()->id ?? User::factory(),
@@ -27,8 +32,8 @@ class TasksFactory extends Factory
             'title'=>fake()->sentence(),
             'description'=>fake()->paragraph(),
             'priority'=>fake()->randomElement(['low', 'medium', 'high']),
+            'status_id'=>$statusId,
             'storyPoints'=>fake()->numberBetween(1, 13),
-            'status' => fake()->randomElement(['toDo', 'inProgress', 'done']),
             'created_at' => now(),
             'updated_at' => now(),
             // Mặc định factory tạo ra 1 User Story (task cha)

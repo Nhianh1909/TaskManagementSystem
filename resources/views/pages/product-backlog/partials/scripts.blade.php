@@ -244,7 +244,7 @@
         modal.classList.remove('hidden');
         // modal.classList.add('flex'); // Không cần, modal content đã có flex để căn giữa
 
-            activeCommentsStoryId = storyId; // Track the active story ID
+        // activeCommentsStoryId = storyId; // Track the active story ID
         // Reset form về trống
         document.getElementById('story-title').value = '';
         document.getElementById('story-description').value = '';
@@ -253,10 +253,16 @@
         document.getElementById('story-priority').value = 'medium';
         document.getElementById('story-assignee').value = '';
 
+        // Hiển thị tên Epic (read-only)
+        document.getElementById('story-epic-id').value = epicId;
+
+        // Logic hiển thị tên: Ưu tiên tên truyền vào -> Tên trong mảng -> ID
+        const displayTitle = epicTitle ? epicTitle : (epicTitles[epicId] || ('Epic #' + epicId));
+        document.getElementById('story-epic-display').value = displayTitle;
     // Hiển thị tên Epic (read-only)
-    document.getElementById('story-epic-id').value = epicId;
-    const displayTitle = epicTitle != null ? epicTitle : (epicTitles[epicId] || ('Epic #' + epicId));
-    document.getElementById('story-epic-display').value = displayTitle;
+    // document.getElementById('story-epic-id').value = epicId;
+    // const displayTitle = epicTitle != null ? epicTitle : (epicTitles[epicId] || ('Epic #' + epicId));
+    // document.getElementById('story-epic-display').value = displayTitle;
     }
 
     // Đóng Create User Story Modal
@@ -784,34 +790,34 @@
 
     // Gọi API để assign story vào Future Sprint
     async function assignStoryToFutureSprint(storyId) {
-  const select = document.getElementById('assign-sprint-select-' + storyId);
-  if (!select || !select.value) {
-    alert('Please select a Future Sprint');
-    return;
-  }
-  const sprintId = select.value;
+        const select = document.getElementById('assign-sprint-select-' + storyId);
+        if (!select || !select.value) {
+            alert('Please select a Future Sprint');
+            return;
+        }
+        const sprintId = select.value;
 
-  try {
-    const res = await fetch(`/user-stories/${storyId}/assign-future-sprint`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
-      },
-      body: JSON.stringify({ sprint_id: sprintId })
-    });
-    const data = await res.json();
-    if (res.ok) {
-      alert('Assigned to Future Sprint successfully!');
-      location.reload(); // đơn giản: reload hiển thị ngay
-    } else {
-      alert(data.message || 'Failed to assign story.');
+        try {
+            const res = await fetch(`/user-stories/${storyId}/assign-future-sprint`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            },
+            body: JSON.stringify({ sprint_id: sprintId })
+            });
+            const data = await res.json();
+            if (res.ok) {
+            alert('Assigned to Future Sprint successfully!');
+            location.reload(); // đơn giản: reload hiển thị ngay
+            } else {
+            alert(data.message || 'Failed to assign story.');
+            }
+        } catch (e) {
+            console.error(e);
+            alert('Error assigning story to sprint.');
+        }
     }
-  } catch (e) {
-    console.error(e);
-    alert('Error assigning story to sprint.');
-  }
-}
 
 // =================================================================================
 //*                    DRAG & DROP REORDER USER STORIES

@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
+use App\Models\TaskStatus;
 use App\Models\User;
 use App\Models\Teams;
 use App\Models\Sprints;
@@ -12,7 +13,7 @@ use App\Models\Epics;
 use App\Models\Retrospective;
 use App\Models\RetrospectiveItem;
 use Illuminate\Support\Facades\Hash;
-
+use Illuminate\Support\Facades\DB; // Import DB để lấy status id
 class DatabaseSeeder extends Seeder
 {
     public function run(): void
@@ -22,6 +23,39 @@ class DatabaseSeeder extends Seeder
             'name' => 'ScrumSpark Team',
             'description' => 'The main development team for the ScrumSpark project.',
         ]);
+
+        // =================================================================
+        // BƯỚC 2: TẠO STATUS CHO TEAM
+        // =================================================================
+        $this->command->info('Creating Task Statuses for team...');
+        
+        $toDo = TaskStatus::create([
+            'name' => 'To Do',
+            'order_index' => 1,
+            'is_done' => false,
+            'color_class' => 'border-blue-400',
+            'team_id' => $team->id,
+        ]);
+
+        $inProgress = TaskStatus::create([
+            'name' => 'In Progress',
+            'order_index' => 2,
+            'is_done' => false,
+            'color_class' => 'border-yellow-400',
+            'team_id' => $team->id,
+        ]);
+
+        $done = TaskStatus::create([
+            'name' => 'Done',
+            'order_index' => 3,
+            'is_done' => true,
+            'color_class' => 'border-green-400',
+            'team_id' => $team->id,
+        ]);
+
+        $toDoId = $toDo->id;
+        $inProgressId = $inProgress->id;
+        $doneId = $done->id;
 
         // --- 2. TẠO NGƯỜI DÙNG ---
         // Tạo 10 user với vai trò mặc định là 'developer'
@@ -90,7 +124,7 @@ class DatabaseSeeder extends Seeder
             'sprint_id' => $sprint0->id,
             'epic_id' => $epic1->id,
             'parent_id' => null, // Là User Story (cha)
-            'status' => 'done',
+            'status_id' => $doneId, // ✨ Dùng ID
         ]);
         // --- Tạo 2 User Story cho Sprint 1 ---
         $us1 = Tasks::factory()->create([
@@ -99,7 +133,7 @@ class DatabaseSeeder extends Seeder
             'sprint_id' => $sprint1->id,
             'epic_id' => $epic1->id,
             'parent_id' => null, // Là User Story (cha)
-            'status' => 'inProgress',
+            'status_id' => $inProgressId, // ✨ Dùng ID
         ]);
         // Tạo 3 Sub-task cho US-101
         Tasks::factory()->subtask()->count(3)->create([
@@ -107,7 +141,7 @@ class DatabaseSeeder extends Seeder
             'sprint_id' => $sprint1->id,
             'created_by' => $scrumMaster->id,
             'assigned_to' => $teamMemberIds->random(),
-            'status' => fake()->randomElement(['toDo', 'inProgress', 'done']),
+            'status_id' => fake()->randomElement([$toDoId, $inProgressId, $doneId]), // ✨ Random ID
         ]);
         $us2 = Tasks::factory()->create([
             'title' => 'US-102: Là người dùng, tôi muốn Đăng ký',
@@ -115,7 +149,7 @@ class DatabaseSeeder extends Seeder
             'sprint_id' => $sprint1->id,
             'epic_id' => $epic1->id,
             'parent_id' => null,
-            'status' => 'toDo',
+            'status_id' => $toDoId, // ✨ Dùng ID
         ]);
 
         // Tạo 2 Sub-task cho US-102
@@ -124,7 +158,7 @@ class DatabaseSeeder extends Seeder
             'sprint_id' => $sprint1->id,
             'created_by' => $scrumMaster->id,
             'assigned_to' => $teamMemberIds->random(),
-            'status' => 'toDo',
+            'status_id' => $toDoId, // ✨ Dùng ID
         ]);
         // --- Tạo 1 User Story cho Product Backlog (chưa vào Sprint) ---
         $us3 = Tasks::factory()->create([
@@ -133,7 +167,7 @@ class DatabaseSeeder extends Seeder
             'sprint_id' => null, // Nằm ở Backlog
             'epic_id' => $epic2->id,
             'parent_id' => null,
-            'status' => 'toDo',
+            'status_id' => $toDoId, // ✨ Dùng ID
         ]);
         // --- 7. TẠO COMMENTS CHO 1 SUB-TASK NGẪU NHIÊN ---
         $ramdomSubtask = Tasks::whereNotNull('parent_id')->first();

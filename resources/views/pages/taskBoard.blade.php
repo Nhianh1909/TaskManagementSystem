@@ -1,59 +1,58 @@
 @extends('layouts.app')
 
 @section('content')
-<div id="taskboard" class="page">
-    <div class="max-w-7xl mx-auto px-4 py-8">
+<div id="taskboard" class="page h-screen flex flex-col">
+    <div class="max-w-7xl mx-auto px-4 py-8 flex-1 flex flex-col h-full">
 
-        {{-- SỬA LỖI 1: Thêm z-20 để header luôn nằm trên --}}
-        <div class="flex justify-between items-center mb-8 relative z-20">
-            <div>
-                <h1 class="text-3xl font-bold text-gray-800">Task Board</h1>
-                @if($activeSprint)
-                    <p class="text-gray-600">Current Sprint: <span class="font-semibold">{{ $activeSprint->name }}</span></p>
-                @else
-                    <p class="text-gray-600">No active sprint. Viewing Product Backlog.</p>
+            {{-- HEADER --}}
+            <div class="flex justify-between items-center mb-4 relative z-20 flex-shrink-0">
+                <div>
+                    <h1 class="text-3xl font-bold text-gray-800">Task Board</h1>
+                    @if($activeSprint)
+                        <p class="text-gray-600">Current Sprint: <span class="font-semibold">{{ $activeSprint->name }}</span></p>
+                    @else
+                        <p class="text-gray-600">No active sprint. Viewing Product Backlog.</p>
+                    @endif
+                </div>
+                {{-- Nút thêm cột (Chỉ hiện cho PO/SM) --}}
+                @if(in_array($userRoleInTeam, ['product_owner', 'scrum_master']))
+                <div class="flex gap-2">
+                    <button onclick="openAddColumnModal()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300 transition-colors">
+                        <i class="fas fa-columns mr-2"></i>Add Column
+                    </button>
+                    @if($userRoleInTeam === 'product_owner')
+                    <button onclick="openTaskModal()" class="gradient-btn text-white px-6 py-2 rounded-lg font-semibold">
+                        <i class="fas fa-plus mr-2"></i>Add Task
+                    </button>
+                    @endif
+                </div>
                 @endif
             </div>
-            {{-- Sửa lỗi phân quyền: Dùng $userRoleInTeam --}}
-            @if(isset($userRoleInTeam) && $userRoleInTeam === 'product_owner')
-            <button onclick="openTaskModal()" class="gradient-btn text-white px-6 py-3 rounded-lg font-semibold">
-                <i class="fas fa-plus mr-2"></i>Add Task to Backlog
-            </button>
-            @endif
-        </div>
 
-        {{-- SỬA LỖI 2: Thêm z-10 để lưới nằm dưới header --}}
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 relative z-10">
-            @php
-                $columns = [
-                    'decomposition' => ['title' => 'US Decomposition', 'icon' => 'fa-sitemap', 'color' => 'purple-500', 'tasks' => collect()],
-                    // CHỈ HIỂN THỊ SUBTASKS (tasks có parent_id) trong 3 cột Kanban
-                    'toDo' => ['title' => 'To Do', 'icon' => 'fa-list', 'color' => 'blue-500', 'tasks' => $sprintTasks->where('status', 'toDo')->whereNotNull('parent_id')],
-                    'inProgress' => ['title' => 'In Progress', 'icon' => 'fa-spinner', 'color' => 'yellow-500', 'tasks' => $sprintTasks->where('status', 'inProgress')->whereNotNull('parent_id')],
-                    'done' => ['title' => 'Done', 'icon' => 'fa-check', 'color' => 'green-500', 'tasks' => $sprintTasks->where('status', 'done')->whereNotNull('parent_id')],
-                ];
-            @endphp
+        {{-- 🔥 MAIN BOARD GRID (SCROLL NGANG CHO CÁC CỘT ĐỘNG) --}}
+        <div class="flex-1 overflow-x-auto overflow-y-hidden pb-4">
+            <div class="flex h-full gap-6 min-w-full">
 
-            @foreach($columns as $key => $column)
-            <div class="bg-{{ explode('-', $column['color'])[0] }}-50 rounded-2xl p-4 flex flex-col">
-                <h3 class="font-semibold text-gray-700 mb-4 flex items-center flex-shrink-0">
-                    <i class="fas {{ $column['icon'] }} text-{{ $column['color'] }} mr-2"></i>{{ $column['title'] }}
-                    @if($key !== 'decomposition')
-                        <span class="ml-auto bg-{{ $column['color'] }} text-white text-xs px-2 py-1 rounded-full">{{ count($column['tasks']) }}</span>
-                    @endif
-                </h3>
+                {{-- ======================================================= --}}
+                {{-- 1. CỘT CỐ ĐỊNH: US DECOMPOSITION (Giữ nguyên UI cũ) --}}
+                {{-- ======================================================= --}}
+                <div class="flex-shrink-0 w-80 flex flex-col bg-purple-50 rounded-2xl p-4 border-t-4 border-purple-500 h-full">
+                    <h3 class="font-semibold text-gray-700 mb-4 flex items-center flex-shrink-0">
+                        <i class="fas fa-sitemap text-purple-500 mr-2"></i>US Decomposition
+                    </h3>
 
-                {{-- NỘI DUNG RIÊNG CHO CỘT US DECOMPOSITION --}}
-                @if($key === 'decomposition')
-                    <div class="space-y-4">
-                        {{-- Filter User Stories trong Sprint --}}
+                    <div class="flex-1 flex flex-col min-h-0 space-y-4 overflow-y-auto pr-2 custom-scrollbar-y">
+                        {{-- Filter User Stories --}}
                         <div>
                             <label class="block text-sm font-semibold text-gray-700 mb-2">
                                 <i class="fas fa-filter mr-1"></i>Filter User Story:
                             </label>
                             @php
-                                // Lấy User Stories trong sprint hiện tại (parent_id = null)
-                                $userStories = $activeSprint ? $sprintTasks->whereNull('parent_id') : collect();
+                                // Lấy US từ sprint tasks (những task có parent_id = null)
+                                // Lưu ý: $columns từ controller trả về đã chứa task con,
+                                // ta cần lấy danh sách US từ $activeSprint hoặc query riêng.
+                                // Ở đây tạm dùng $activeSprint để lấy US
+                                $userStories = $activeSprint ? $activeSprint->tasks()->whereNull('parent_id')->get() : collect();
                             @endphp
                             <select id="user-story-filter" class="w-full border border-purple-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500 bg-white">
                                 <option value="">-- All User Stories --</option>
@@ -65,150 +64,167 @@
                             </select>
                         </div>
 
-                        {{-- Nút Create Subtask (chỉ hiện với Product Owner) --}}
+                        {{-- Create Subtask Button --}}
                         @if(isset($userRoleInTeam) && $userRoleInTeam === 'product_owner')
-                            <button
-                                id="create-subtask-btn"
-                                class="w-full bg-purple-600 text-white py-2.5 rounded-lg hover:bg-purple-700 transition-colors font-semibold disabled:bg-gray-300 disabled:cursor-not-allowed"
-                                disabled>
+                            <button id="create-subtask-btn" class="w-full bg-purple-600 text-white py-2.5 rounded-lg hover:bg-purple-700 transition-colors font-semibold disabled:bg-gray-300 disabled:cursor-not-allowed flex-shrink-0" disabled>
                                 <i class="fas fa-plus mr-2"></i>Create Subtask
                             </button>
-                            <p class="text-xs text-gray-500 text-center">
-                                <i class="fas fa-info-circle mr-1"></i>Select a User Story first
-                            </p>
                         @endif
 
-                        {{-- Danh sách User Stories --}}
-                        <div class="space-y-2 max-h-[400px] overflow-y-auto">
-                            <p class="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
-                                User Stories in Sprint
-                            </p>
-                            @forelse($userStories as $story)
+                        {{-- Danh sách User Stories (ReadOnly List) --}}
+                        <div class="space-y-2">
+                             @forelse($userStories as $story)
                                 <div class="bg-white p-3 rounded-lg shadow-sm border-l-4 border-purple-400 hover:shadow-md transition-shadow">
-                                    <div class="flex items-start justify-between">
-                                        <div class="flex-1">
-                                            <p class="text-sm font-semibold text-gray-800">
-                                                #{{ $story->id }} - {{ Str::limit($story->title, 40) }}
-                                            </p>
-                                            <div class="flex items-center gap-3 mt-2 text-xs text-gray-500">
-                                                <span>
-                                                    <i class="fas fa-chart-simple mr-1 text-blue-500"></i>
-                                                    {{ $story->storyPoints ?? 0 }} pts
-                                                </span>
-                                                <span>
-                                                    <i class="fas fa-tasks mr-1 text-purple-500"></i>
-                                                    {{ $sprintTasks->where('parent_id', $story->id)->count() }} subtasks
-                                                </span>
-                                            </div>
-                                        </div>
+                                    <p class="text-sm font-semibold text-gray-800">#{{ $story->id }} - {{ Str::limit($story->title, 40) }}</p>
+                                    <div class="flex items-center gap-3 mt-2 text-xs text-gray-500">
+                                        <span><i class="fas fa-chart-simple mr-1 text-blue-500"></i>{{ $story->storyPoints ?? 0 }} pts</span>
                                     </div>
                                 </div>
                             @empty
-                                <div class="text-center py-8 text-gray-400">
-                                    <i class="fas fa-inbox text-3xl mb-2"></i>
-                                    <p class="text-sm">No User Stories in current sprint</p>
-                                </div>
+                                <div class="text-center py-8 text-gray-400">No stories in sprint</div>
                             @endforelse
                         </div>
                     </div>
+                </div>
 
-                {{-- NỘI DUNG CHO CÁC CỘT KHÁC (To Do, In Progress, Done) --}}
-                @else
-                    <div class="task-column space-y-3 min-h-[200px] flex-grow overflow-y-auto"
-                         ondrop="drop(event)"
+                {{-- ======================================================= --}}
+                {{-- 2. CÁC CỘT ĐỘNG TỪ DATABASE (To Do, In Progress...) --}}
+                {{-- ======================================================= --}}
+                @foreach($columns as $column)
+                <div class="flex-shrink-0 w-80 flex flex-col bg-gray-100 rounded-2xl shadow-sm h-full max-h-full border-t-4 {{ $column->color_class ?? 'border-gray-400' }}">
+
+                    {{-- Header Cột --}}
+                    <div class="p-4 flex justify-between items-center bg-gray-200 rounded-t-xl border-b border-gray-300 flex-shrink-0 task-column-header cursor-move hover:bg-gray-300 transition-colors group">
+                        <h3 class="font-bold text-gray-700 text-sm uppercase tracking-wide truncate flex-1" title="{{ $column->name }}">
+                            {{ $column->name }}
+                        </h3>
+                        <span class="bg-white text-gray-600 text-xs px-2 py-1 rounded-full font-bold shadow-sm mr-2">
+                            {{ $column->tasks->count() }}
+                        </span>
+                        {{-- Delete Column Button --}}
+                        @if(in_array($userRoleInTeam, ['product_owner', 'scrum_master']))
+                            <button onclick="deleteColumn({{ $column->id }}, '{{ $column->name }}', {{ $column->tasks->count() }})"
+                                    class="text-red-500 hover:text-red-700 hover:bg-red-100 p-1 rounded transition-colors opacity-0 group-hover:opacity-100"
+                                    title="Delete column">
+                                <i class="fas fa-trash text-xs"></i>
+                            </button>
+                        @endif
+                    </div>
+
+                    {{-- Dropzone (Nơi chứa Task) --}}
+                    <div class="flex-1 p-3 overflow-y-auto space-y-3 custom-scrollbar-y min-h-[100px] task-column"
+                         id="status-{{ $column->id }}"
+                         data-column-status="{{ $column->id }}"
+                         ondrop="drop(event, {{ $column->id }})"
                          ondragover="allowDrop(event)"
-                         ondragleave="dragLeave(event)"
-                         data-column-status="{{ $key }}">
+                         ondragleave="dragLeave(event)">
 
-                        @foreach($column['tasks'] as $task)
-                        @php
-                            $isDraggable = (Auth::id() === $task->assigned_to || (isset($userRoleInTeam) && $userRoleInTeam === 'scrum_master'));
+                        @foreach($column->tasks as $task)
+                            {{-- Chỉ hiển thị Subtask (có parent_id) trong bảng Kanban --}}
+                            @if($task->parent_id)
+                                @php
+                                    $isDraggable = (Auth::id() === $task->assigned_to || (isset($userRoleInTeam) && $userRoleInTeam === 'scrum_master'));
+                                    $isHighlighted = (Auth::id() === $task->assigned_to);
+                                @endphp
 
-                            // LOGIC LÀM ĐẬM TASK MỚI
-                            $isHighlighted = (
-                                // 1. Là task được giao cho tôi
-                                Auth::id() === $task->assigned_to ||
-                                // 2. Hoặc tôi là Scrum Master (thấy đậm mọi task trong sprint)
-                                (isset($userRoleInTeam) && $userRoleInTeam === 'scrum_master') ||
-                                // 3. Hoặc tôi là Product Owner VÀ task này đang ở trong Product Backlog
-                                (isset($userRoleInTeam) && $userRoleInTeam === 'product_owner' && is_null($task->sprint_id))
-                            );
-                        @endphp
+                                <div class="task-card priority-{{ $task->priority }} bg-white p-4 rounded-lg shadow-sm border border-gray-200
+                                     {{ $isDraggable ? 'cursor-move hover:shadow-md' : 'cursor-not-allowed opacity-80' }}
+                                     transition-all duration-200 group relative
+                                     @if($isHighlighted) ring-2 ring-blue-400 @endif"
+                                     draggable="{{ $isDraggable ? 'true' : 'false' }}"
+                                     ondragstart="drag(event, {{ $task->id }})"
+                                     id="task-{{ $task->id }}"
+                                     data-task-id="{{ $task->id }}"
+                                     data-parent-id="{{ $task->parent_id }}">
 
-                        <div class="task-card priority-{{ $task->priority }} bg-white p-4 rounded-lg shadow-sm {{ $isDraggable ? 'cursor-move' : 'cursor-not-allowed' }} transition-all duration-200 @if($isHighlighted) border-2 border-blue-500 scale-105 @else opacity-70 @endif"
-                            draggable="{{ $isDraggable ? 'true' : 'false' }}"
-                            ondragstart="drag(event)"
-                            data-task-id="{{ $task->id }}"
-                            data-parent-id="{{ $task->parent_id ?? '' }}"
-                            data-task-sprint-id="{{ $task->sprint_id }}">
+                                    {{-- Parent Story Label --}}
+                                    <div class="mb-1">
+                                        <span class="text-[10px] font-bold uppercase tracking-wider text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">
+                                            US #{{ $task->parent_id }}
+                                        </span>
+                                    </div>
 
-                            <div class="flex justify-between items-start">
-                                <div class="flex-1">
-                                    {{-- Hiển thị parent US nếu là subtask --}}
-                                    @if($task->parent_id)
-                                        <p class="text-xs text-purple-600 font-semibold mb-1">
-                                            <i class="fas fa-link mr-1"></i>US #{{ $task->parent_id }}
-                                        </p>
-                                    @endif
-                                    <h4 class="font-medium text-gray-800 mb-2">{{ $task->title }}</h4>
-                                </div>
+                                    {{-- Title & Menu --}}
+                                    <div class="flex justify-between items-start mb-2">
+                                        <h4 class="font-medium text-gray-800 text-sm leading-snug hover:text-blue-600 cursor-pointer" onclick="openTaskDetail({{ $task->id }})">
+                                            {{ $task->title }}
+                                        </h4>
 
-                                {{-- Nút Edit/Delete cho Product Owner --}}
-                                @if(isset($userRoleInTeam) && $userRoleInTeam === 'product_owner')
-                                    <div class="flex-shrink-0 ml-2">
-                                        @if($task->parent_id)
-                                            {{-- Subtask: Nút màu tím --}}
-                                            <button onclick="editSubtask({{ $task->id }})" class="text-purple-500 hover:text-purple-700 text-xs p-1" title="Edit Subtask">
-                                                <i class="fas fa-edit"></i>
-                                            </button>
-                                            <button onclick="deleteSubtask({{ $task->id }})" class="text-red-500 hover:text-red-700 text-xs p-1" title="Delete Subtask">
-                                                <i class="fas fa-trash"></i>
-                                            </button>
-                                        @elseif(is_null($task->sprint_id))
-                                            {{-- User Story trong Backlog: Nút màu xanh --}}
-                                            <button onclick="editTask({{ $task->id }})" class="text-blue-500 hover:text-blue-700 text-xs p-1" title="Edit Task">
-                                                <i class="fas fa-edit"></i>
-                                            </button>
-                                            <button onclick="deleteTask({{ $task->id }})" class="text-red-500 hover:text-red-700 text-xs p-1" title="Delete Task">
-                                                <i class="fas fa-trash"></i>
-                                            </button>
+                                        {{-- Edit/Delete Buttons (Cho PO) --}}
+                                        @if(isset($userRoleInTeam) && $userRoleInTeam === 'product_owner')
+                                        <div class="flex-shrink-0 ml-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button onclick="editSubtask({{ $task->id }})" class="text-gray-400 hover:text-blue-600"><i class="fas fa-pen text-xs"></i></button>
+                                            <button onclick="deleteSubtask({{ $task->id }})" class="text-gray-400 hover:text-red-600"><i class="fas fa-trash text-xs"></i></button>
+                                        </div>
                                         @endif
                                     </div>
-                                @endif
-                            </div>
-                            <p class="text-sm text-gray-600 mb-3">{{ Str::limit($task->description, 100) }}</p>
-                            <div class="flex items-center justify-between">
-                                @php
-                                    $priorityColors = ['low' => 'green', 'medium' => 'yellow', 'high' => 'red'];
-                                @endphp
-                                <span class="text-xs font-semibold bg-{{ $priorityColors[$task->priority] }}-100 text-{{ $priorityColors[$task->priority] }}-800 px-2 py-1 rounded-full">{{ ucfirst($task->priority) }}</span>
-                                <div class="flex items-center gap-3">
-                                    <button type="button" class="comment-toggle text-gray-500 hover:text-blue-600 flex items-center gap-1" data-task-id="{{ $task->id }}" title="Comment">
-                                        <i class="far fa-comment"></i>
-                                        <span class="comment-count text-xs bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded-full">{{ $task->comments_count ?? 0 }}</span>
-                                    </button>
-                                    @if($task->assignee)
-                                        <img src="https://ui-avatars.com/api/?name={{ urlencode($task->assignee->name) }}&background=random&color=fff" alt="Assignee" class="w-6 h-6 rounded-full" title="Assigned to {{ $task->assignee->name }}">
-                                    @endif
-                                </div>
-                            </div>
 
-                            <div class="comment-box mt-3 hidden w-full overflow-hidden" data-task-id="{{ $task->id }}">
-                                <div class="flex items-center gap-2 w-full">
-                                    <input type="text" class="comment-input w-0 flex-1 min-w-0 border border-gray-300 rounded-md px-3 py-2 text-sm" placeholder="Nhập nhận xét và nhấn Enter..." />
-                                    <button type="button" class="comment-send shrink-0 bg-blue-600 text-white px-3 py-2 rounded-md" data-task-id="{{ $task->id }}" title="Gửi">
-                                        <i class="fas fa-paper-plane"></i>
-                                    </button>
+                                    {{-- Description Preview --}}
+                                    @if($task->description)
+                                        <p class="text-xs text-gray-500 mb-3 line-clamp-2">{{ $task->description }}</p>
+                                    @endif
+
+                                    {{-- Footer: Priority, Comments, Avatar --}}
+                                    <div class="flex items-center justify-between mt-2 pt-2 border-t border-dashed border-gray-100">
+                                        <div class="flex items-center gap-2">
+                                            {{-- Priority Badge --}}
+                                            @php
+                                                $pColor = match($task->priority) {
+                                                    'high' => 'text-red-700 bg-red-50 border-red-200',
+                                                    'medium' => 'text-yellow-700 bg-yellow-50 border-yellow-200',
+                                                    'low' => 'text-green-700 bg-green-50 border-green-200',
+                                                    default => 'text-gray-700 bg-gray-50'
+                                                };
+                                            @endphp
+                                            <span class="text-[10px] px-1.5 py-0.5 rounded border {{ $pColor }} font-medium">
+                                                {{ ucfirst($task->priority) }}
+                                            </span>
+
+                                            {{-- Comment Count --}}
+                                            <button class="comment-toggle text-gray-400 hover:text-blue-500 flex items-center gap-1 text-xs" data-task-id="{{ $task->id }}">
+                                                <i class="far fa-comment"></i>
+                                                <span>{{ $task->comments_count ?? 0 }}</span>
+                                            </button>
+                                        </div>
+
+                                        {{-- Avatar --}}
+                                        <div class="flex items-center">
+                                            @if($task->assignee)
+                                                <img src="https://ui-avatars.com/api/?name={{ urlencode($task->assignee->name) }}&background=random&size=24&color=fff"
+                                                     class="w-6 h-6 rounded-full border border-white shadow-sm"
+                                                     title="{{ $task->assignee->name }}">
+                                            @else
+                                                <div class="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[10px] text-gray-400 border border-white">
+                                                    <i class="fas fa-user"></i>
+                                                </div>
+                                            @endif
+                                        </div>
+                                    </div>
+
+                                    {{-- Comment Box (Hidden) --}}
+                                    <div class="comment-box mt-3 hidden w-full" data-task-id="{{ $task->id }}">
+                                        {{-- (Giữ nguyên code comment cũ của bạn) --}}
+                                        <div class="flex items-center gap-2 w-full">
+                                            <input type="text" class="comment-input w-0 flex-1 border border-gray-300 rounded px-2 py-1 text-xs" placeholder="Comment..." />
+                                            <button type="button" class="comment-send bg-blue-600 text-white px-2 py-1 rounded text-xs" data-task-id="{{ $task->id }}">
+                                                <i class="fas fa-paper-plane"></i>
+                                            </button>
+                                        </div>
+                                        <div class="comments-list mt-2 space-y-1 max-h-32 overflow-y-auto text-xs" data-loaded="false"></div>
+                                    </div>
                                 </div>
-                                <div class="comments-list mt-2 space-y-2 max-h-48 overflow-y-auto text-sm text-gray-700" data-loaded="false"></div>
-                                <button type="button" class="load-more-comments hidden mt-2 text-xs text-blue-600 hover:underline" data-task-id="{{ $task->id }}">Xem thêm bình luận</button>
+                            @endif
+                        @endforeach
+
+                        @if($column->tasks->whereNotNull('parent_id')->isEmpty())
+                            <div class="h-20 flex items-center justify-center text-gray-400 text-xs italic border-2 border-dashed border-gray-200 rounded-lg bg-gray-50/50">
+                                Drop tasks here
                             </div>
-                        </div>
-                    @endforeach
+                        @endif
                     </div>
-                @endif
+                </div>
+                @endforeach
             </div>
-            @endforeach
         </div>
     </div>
 </div>
@@ -379,6 +395,117 @@
 </div>
 @endif
 
+{{-- 🔥 Modal Add Column (Dành cho PO/SM) --}}
+@if(in_array($userRoleInTeam, ['product_owner', 'scrum_master']))
+<div id="addColumnModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+    <div class="bg-white p-6 rounded-xl shadow-xl max-w-md w-full mx-4">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold text-gray-800">
+                <i class="fas fa-columns text-blue-600 mr-2"></i>Create New Column
+            </h3>
+            <button onclick="closeAddColumnModal()" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <form id="add-column-form" class="space-y-4">
+            @csrf
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Column Name</label>
+                <input
+                    type="text"
+                    id="column-name"
+                    name="name"
+                    required
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="e.g., Review, QA Testing">
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Color</label>
+                <div class="flex gap-3">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="color_class" value="border-blue-400" checked class="w-4 h-4">
+                        <span class="inline-block w-6 h-6 bg-blue-100 border-2 border-blue-400 rounded"></span>
+                        <span class="text-sm text-gray-600">Blue</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="color_class" value="border-green-400" class="w-4 h-4">
+                        <span class="inline-block w-6 h-6 bg-green-100 border-2 border-green-400 rounded"></span>
+                        <span class="text-sm text-gray-600">Green</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="color_class" value="border-yellow-400" class="w-4 h-4">
+                        <span class="inline-block w-6 h-6 bg-yellow-100 border-2 border-yellow-400 rounded"></span>
+                        <span class="text-sm text-gray-600">Yellow</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="color_class" value="border-red-400" class="w-4 h-4">
+                        <span class="inline-block w-6 h-6 bg-red-100 border-2 border-red-400 rounded"></span>
+                        <span class="text-sm text-gray-600">Red</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2 bg-blue-50 border-l-4 border-blue-400 p-3 rounded">
+                <i class="fas fa-info-circle text-blue-600"></i>
+                <p class="text-xs text-blue-700">Column will be added at the end. Drag header to reorder.</p>
+            </div>
+
+            <div class="flex space-x-3 pt-4">
+                <button type="submit" class="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 font-semibold transition-colors">
+                    <i class="fas fa-plus mr-2"></i>Create Column
+                </button>
+                <button type="button" onclick="closeAddColumnModal()" class="flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-400 font-semibold">
+                    Cancel
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+@endif
+
+{{-- 🔥 Modal Delete Column Warning --}}
+@if(in_array($userRoleInTeam, ['product_owner', 'scrum_master']))
+<div id="deleteColumnModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+    <div class="bg-white p-6 rounded-xl shadow-2xl max-w-md w-full mx-4">
+        <div class="text-center">
+            <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+                <i class="fas fa-exclamation-triangle text-red-600 text-xl"></i>
+            </div>
+            <h3 class="text-lg font-semibold text-gray-900 mb-2">Delete Column</h3>
+            <p class="text-gray-600 mb-4" id="delete-column-message">
+                Are you sure you want to delete this column?
+            </p>
+
+            <div id="task-warning" class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4 hidden">
+                <p class="text-sm text-yellow-800">
+                    <i class="fas fa-info-circle mr-2"></i>
+                    <strong id="task-count-text">0 tasks</strong> will be moved to another column or deleted.
+                </p>
+            </div>
+
+            <div id="move-tasks-section" class="mb-4 hidden">
+                <label class="block text-sm font-medium text-gray-700 mb-2 text-left">Move tasks to:</label>
+                <select id="target-column-select" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500">
+                    <option value="">-- Select a column --</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="flex space-x-3 pt-4">
+            <button onclick="confirmDeleteColumn()" class="flex-1 bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 font-semibold transition-colors">
+                <i class="fas fa-trash mr-2"></i>Delete Column
+            </button>
+            <button onclick="closeDeleteColumnModal()" class="flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-400 font-semibold">
+                Cancel
+            </button>
+        </div>
+    </div>
+</div>
+@endif
+
 @endsection
 
 @push('scripts')
@@ -432,12 +559,12 @@
         // Function để filter tasks theo User Story
         function filterTasksByUserStory(storyId) {
             const allTaskCards = document.querySelectorAll('.task-card');
-            let visibleCount = { toDo: 0, inProgress: 0, done: 0 };
+            let visibleCount = { toDo: 0, inProgress: 0, done: 0 }; //Tạo một biến đếm tạm thời để theo dõi xem sau khi lọc xong thì mỗi cột (To Do, In Progress, Done) còn lại bao nhiêu task hiển thị.
 
             allTaskCards.forEach(card => {
                 const parentId = card.getAttribute('data-parent-id');
-                const column = card.closest('.task-column');
-                const columnStatus = column ? column.getAttribute('data-column-status') : null;
+                const column = card.closest('.task-column'); //tìm xem task này đang nằm ở cột nào.
+                const columnStatus = column ? column.getAttribute('data-column-status') : null;//lấy tên trạng thái todo và done
 
                 // Bỏ qua các task không có parent_id (User Stories)
                 // Chỉ xử lý subtasks (tasks có parent_id)
@@ -445,10 +572,10 @@
                     return; // Skip User Stories
                 }
 
-                if (storyId === '') {
+                if (storyId === '') {//trường hợp storyId rỗng thì hiên thị tất cả suptask
                     // Không filter: Hiển thị tất cả subtasks
                     card.classList.remove('hidden');
-                    if (columnStatus) visibleCount[columnStatus]++;
+                    if (columnStatus) visibleCount[columnStatus]++;//mỗi lần vòng lặp tìm thấy cột sẽ cộng số lượng vào cột đó
                 } else {
                     // Filter: Chỉ hiển thị subtasks của User Story được chọn
                     if (parentId === storyId) {
@@ -699,7 +826,7 @@
     });
 
     // ===================================================================================
-    // COMMENT SYSTEM (Code cũ giữ nguyên)
+    // COMMENT SYSTEM
     // ===================================================================================
     // --- COMMENT: toggle & submit logic ---
     document.addEventListener('click', function(e) {
@@ -839,14 +966,14 @@
         try { return new Date(str).toLocaleString(); } catch { return str; }
     }
 
-    // --- DRAG AND DROP LOGIC (Đã nâng cấp) ---
+    // --- DRAG AND DROP LOGIC (Simplified) ---
     function allowDrop(ev) {
         ev.preventDefault();
-        const targetColumn = ev.currentTarget;
-        const taskSprintId = ev.dataTransfer.getData("text/sprint-id");
         const isSprintActive = {{ $activeSprint ? 'true' : 'false' }};
 
-        if (isMoveAllowed(taskSprintId, targetColumn.dataset.columnStatus, isSprintActive)) {
+        // Only allow drag-drop when sprint is active
+        if (isSprintActive) {
+            const targetColumn = ev.currentTarget;
             if (targetColumn.classList.contains('task-column')) {
                 targetColumn.classList.add('bg-blue-100', 'border-2', 'border-dashed', 'border-blue-400');
             }
@@ -865,45 +992,21 @@
         ev.dataTransfer.setData("text/sprint-id", taskElement.dataset.taskSprintId);
     }
 
-    function isMoveAllowed(taskSprintId, newStatus, isSprintActive) {
-        const isTaskInBacklog = taskSprintId === '';
-
-        if (!isSprintActive) {
-            return newStatus === 'backlog';
-        }
-
-        if (isTaskInBacklog && newStatus !== 'backlog') {
-            return false;
-        }
-        if (!isTaskInBacklog && newStatus === 'backlog') {
-            return false;
-        }
-
-        return true;
-    }
-
     async function drop(ev) {
         ev.preventDefault();
         const targetColumn = ev.currentTarget;
         dragLeave(ev);
 
-        const newStatus = targetColumn.dataset.columnStatus;
-        const taskId = ev.dataTransfer.getData("text/plain");
-        const taskSprintId = ev.dataTransfer.getData("text/sprint-id");
         const isSprintActive = {{ $activeSprint ? 'true' : 'false' }};
 
-        if (!isMoveAllowed(taskSprintId, newStatus, isSprintActive)) {
-            if (!isSprintActive) {
-                alert('Sprint has not started. You cannot move tasks out of the Product Backlog.');
-            } else if (taskSprintId === '' && newStatus !== 'backlog') {
-                alert('This task is in the Product Backlog. Please add it to the sprint via the Sprint Planning page.');
-            } else if (taskSprintId !== '' && newStatus === 'backlog') {
-                alert('Cannot drag tasks from an active sprint back to the Product Backlog.');
-            }
+        // Block if sprint hasn't started
+        if (!isSprintActive) {
+            alert('Sprint has not started yet. Please start a sprint to move tasks.');
             return;
         }
 
-        const draggedElement = document.querySelector(`[data-task-id="${taskId}"]`);
+        const newStatusId = targetColumn.dataset.columnStatus;
+        const taskId = ev.dataTransfer.getData("text/plain");
 
         try {
             const response = await fetch(`/tasks/${taskId}/status`, {
@@ -913,14 +1016,14 @@
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
                     'Accept': 'application/json',
                 },
-                body: JSON.stringify({ status: newStatus })
+                body: JSON.stringify({ status_id: newStatusId })
             });
 
             const result = await response.json();
             if (!response.ok) {
                 throw new Error(result.message || 'Update failed.');
             }
-            targetColumn.appendChild(draggedElement);
+            location.reload();
         } catch (error) {
             alert('Error: ' + error.message);
         }
@@ -1099,5 +1202,221 @@
             }
         });
     @endif
+
+    // 🔥 THÊM: Kéo-thả sắp xếp column
+    document.addEventListener('DOMContentLoaded', function() {
+        const boardContainer = document.querySelector('.flex.h-full.gap-6.min-w-full');
+
+        if (!boardContainer) return;
+
+        // Khởi tạo SortableJS cho columns
+        new Sortable(boardContainer, {
+            animation: 150,
+            ghostClass: 'opacity-50',
+            dragClass: 'bg-blue-50',
+            handle: '.task-column-header', // Chỉ kéo từ header
+            onEnd: async function(evt) {
+                // Lấy danh sách ID cột mới theo thứ tự
+                const columnIds = Array.from(boardContainer.querySelectorAll('[data-column-status]'))
+                    .map(col => parseInt(col.dataset.columnStatus));
+
+                // Gọi API để cập nhật thứ tự
+                try {
+                    const response = await fetch('/task-statuses/reorder', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                            'Accept': 'application/json',
+                        },
+                        body: JSON.stringify({ order: columnIds })
+                    });
+
+                    const result = await response.json();
+                    if (!response.ok) {
+                        throw new Error(result.message || 'Reorder failed');
+                    }
+                    console.log('✅ Columns reordered:', columnIds);
+                } catch (error) {
+                    alert('Error reordering columns: ' + error.message);
+                    location.reload(); // Reload để rollback
+                }
+            }
+        });
+    });
+
+    // 🔥 Add Column Modal Functions
+    window.openAddColumnModal = function() {
+        const modal = document.getElementById('addColumnModal');
+        if (modal) {
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            document.getElementById('column-name').focus();
+        }
+    };
+
+    window.closeAddColumnModal = function() {
+        const modal = document.getElementById('addColumnModal');
+        if (modal) {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            document.getElementById('add-column-form').reset();
+        }
+    };
+
+    // Handle form submission for Add Column
+    document.addEventListener('DOMContentLoaded', function() {
+        const form = document.getElementById('add-column-form');
+        if (form) {
+            form.addEventListener('submit', async function(e) {
+                e.preventDefault();
+
+                const formData = {
+                    name: document.getElementById('column-name').value,
+                    color_class: document.querySelector('input[name="color_class"]:checked').value
+                };
+
+                // Validation
+                if (!formData.name.trim()) {
+                    alert('Please enter a column name');
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/task-statuses', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                            'Accept': 'application/json',
+                        },
+                        body: JSON.stringify(formData)
+                    });
+
+                    const result = await response.json();
+
+                    if (!response.ok) {
+                        if (response.status === 422) {
+                            let errorMsg = 'Please check your input:\n';
+                            for (const field in result.errors) {
+                                errorMsg += `- ${result.errors[field].join(', ')}\n`;
+                            }
+                            alert(errorMsg);
+                        } else {
+                            throw new Error(result.message || 'Failed to create column');
+                        }
+                    } else {
+                        alert('✅ Column created successfully!');
+                        window.closeAddColumnModal();
+                        window.location.reload();
+                    }
+                } catch (error) {
+                    alert('❌ Error: ' + error.message);
+                }
+            });
+        }
+    });
+
+    // 🔥 Delete Column Functions
+    let columnToDelete = null;
+
+    window.deleteColumn = function(columnId, columnName, taskCount) {
+        columnToDelete = { id: columnId, name: columnName, taskCount: taskCount };
+
+        const modal = document.getElementById('deleteColumnModal');
+        const messageEl = document.getElementById('delete-column-message');
+        const warningEl = document.getElementById('task-warning');
+        const moveTasksSection = document.getElementById('move-tasks-section');
+        const taskCountText = document.getElementById('task-count-text');
+
+        // Update message
+        messageEl.textContent = `Delete column "${columnName}"?`;
+
+        if (taskCount > 0) {
+            // Show warning
+            warningEl.classList.remove('hidden');
+            taskCountText.textContent = taskCount + ' task' + (taskCount > 1 ? 's' : '');
+
+            // Show move tasks section
+            moveTasksSection.classList.remove('hidden');
+            populateTargetColumns(columnId);
+        } else {
+            warningEl.classList.add('hidden');
+            moveTasksSection.classList.add('hidden');
+        }
+
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    };
+
+    window.closeDeleteColumnModal = function() {
+        const modal = document.getElementById('deleteColumnModal');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+        columnToDelete = null;
+    };
+
+    function populateTargetColumns(excludeColumnId) {
+        const select = document.getElementById('target-column-select');
+        select.innerHTML = '<option value="">-- Select a column --</option>';
+
+        // Get all columns except current one
+        const columns = document.querySelectorAll('[data-column-status]');
+        columns.forEach(col => {
+            const colId = parseInt(col.dataset.columnStatus);
+            if (colId !== excludeColumnId) {
+                // Header is sibling of dropzone, so climb to wrapper then find h3
+                const wrapper = col.closest('.flex-shrink-0');
+                const headerText = wrapper ? wrapper.querySelector('.task-column-header h3')?.textContent?.trim() : 'Unknown';
+                const option = document.createElement('option');
+                option.value = colId;
+                option.textContent = headerText || 'Unknown';
+                select.appendChild(option);
+            }
+        });
+    }
+
+    window.confirmDeleteColumn = async function() {
+        if (!columnToDelete) return;
+
+        const { id: columnId, taskCount } = columnToDelete;
+        let moveToColumnId = null;
+
+        // If there are tasks, user must select target column
+        if (taskCount > 0) {
+            moveToColumnId = document.getElementById('target-column-select').value;
+            if (!moveToColumnId) {
+                alert('⚠️ Please select a column to move tasks to');
+                return;
+            }
+        }
+
+        try {
+            const response = await fetch(`/task-statuses/${columnId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify({
+                    move_to_status_id: moveToColumnId ? parseInt(moveToColumnId) : null
+                })
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.message || 'Failed to delete column');
+            }
+
+            alert('✅ Column deleted successfully!');
+            window.closeDeleteColumnModal();
+            window.location.reload();
+        } catch (error) {
+            alert('❌ Error: ' + error.message);
+        }
+    };
+
 </script>
 @endpush

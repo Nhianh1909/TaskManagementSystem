@@ -91,7 +91,6 @@ class ReportController extends Controller
     /**
      * Lấy dữ liệu cho biểu đồ Burndown.
      *
-     * ✅ LOGIC MỚI (theo Scrum chuẩn):
      * - Chỉ tính Story Points từ User Stories (task cha, parent_id = null)
      * - Subtasks KHÔNG có story points riêng (points nằm ở US)
      * - Burndown chỉ "đốt cháy" khi User Story done (tức là tất cả subtasks xong)
@@ -120,7 +119,7 @@ class ReportController extends Controller
             return $date->format('M d');
         });
 
-        // ✅ CHỈ tính tổng Story Points từ User Stories (parent_id = null)
+        // CHỈ tính tổng Story Points từ User Stories (parent_id = null)
 
         // Lý do: Subtasks không có points riêng, points nằm ở task cha (US)
         $totalStoryPoints = $sprint->tasks()
@@ -150,12 +149,18 @@ class ReportController extends Controller
         });//công thức này sẽ duyệt qua từng này và sử dụng tổng storypoints và điểm lý tưởng mỗi ngày đạt được để tính ra số điểm lý tưởng của ngày đó
         //sau đó sẽ làm tròn bằng hàm round
 
-        // ✅ Lấy User Stories (task cha) và subtasks để suy luận "done" an toàn
-        // Lý do: Trong thực tế có thể PO chưa flip US sang "done" dù tất cả subtasks đã done
+        // Lấy User Stories (task cha) và subtasks để suy luận "done" an toàn
+        // Lý do: Trong thực tế có thể PO chưa chốt US sang "done" dù tất cả subtasks đã done
         // → Burndown nên burn tại thời điểm tất cả subtasks hoàn thành (hoặc khi US được set done)
         $allUserStories = $sprint->tasks()
             ->whereNull('parent_id')
-            ->with(['subTasks:id,parent_id,status,updated_at'])
+            ->with([
+                // Eager load status để dùng is_done flag
+                'status:id,is_done,name',
+                // Subtasks kèm status để kiểm tra is_done
+                'subTasks:id,parent_id,status_id,completed_at,updated_at',
+                'subTasks.status:id,is_done,name',
+            ])
             ->orderBy('updated_at')
             ->get();
 
@@ -163,13 +168,14 @@ class ReportController extends Controller
         // - Nếu US.status = done → dùng updated_at của US
         // - Nếu tất cả subtasks đều done → dùng max(updated_at) của các subtask (thời điểm cuối cùng được hoàn thành)
         $doneUserStories = $allUserStories->map(function ($us) {
-            $isExplicitDone = $us->status === 'done';
+            // Done khi status.is_done hoặc có completed_at
+            $isExplicitDone = ($us->status && $us->status->is_done) || $us->completed_at;
 
             // Kiểm tra tất cả subtasks đã done hay chưa
             $subtasks = $us->subTasks ?? collect();
             $hasSubtasks = $subtasks->count() > 0;
             $allSubtasksDone = $hasSubtasks && $subtasks->every(function ($st) {
-                return $st->status === 'done';
+                return ($st->status && $st->status->is_done) || $st->completed_at;
             });
 
             if ($isExplicitDone) {
@@ -229,15 +235,14 @@ class ReportController extends Controller
         // Tính đường burndown thực tế (Remaining Story Points)
         // Bắt đầu từ $totalStoryPoints, giảm dần khi có US done
         $remainingPoints = $totalStoryPoints;
-        $actualData = $dates->map(function ($date) use (&$remainingPoints, $pointsBurnedByDate) {
+        $actualData = $dates->map(function ($dateStr) use (&$remainingPoints, $pointsBurnedByDate) {
             // Nếu có US done trong ngày này, trừ đi Story Points
-            if (isset($pointsBurnedByDate[$date])) {
-                $remainingPoints -= $pointsBurnedByDate[$date];
+            // $dateStr là string (M d format), không phải Carbon object
+            if (isset($pointsBurnedByDate[$dateStr])) {
+                $remainingPoints -= $pointsBurnedByDate[$dateStr];
             }
             return round(max(0, $remainingPoints), 2);
-        });//hàm nãy sẽ hoạt động bằng cách duyệt qua từng ngày trong mảng dates và kiểm tra xem có task nào đã hoàn thành vào ngày đó không
-        //nếu có thì trừ đi số story points của task đó và trả về số story points còn lại sau khi trừ
-        //kết quả sẽ lưu vào mảng actualData sau mỗi vòng lặp
+        });
 
         return [
             'labels' => $dates,
@@ -274,7 +279,9 @@ class ReportController extends Controller
         $data = $completedSprints->map(function ($sprint) {
             return $sprint->tasks()
                 ->whereNull('parent_id') // Chỉ lấy User Stories
-                ->where('status', 'done')
+                ->whereHas('status', function ($q) {
+                    $q->where('is_done', true);
+                })
                 ->sum('storyPoints');
         });
 
@@ -321,15 +328,16 @@ class ReportController extends Controller
             $membersData = [];
 
             foreach ($subtasksByMember as $memberId => $subtasks) {
+                // $subtasks is a Collection, convert to array safely
+                $subtasksArray = $subtasks->all();
+
                 $member = $subtasks->first()->assignee;
 
-                $totalSubtasks = $subtasks->count();
-                $completedSubtasks = $subtasks->where('status', 'done')->count();
+                $totalSubtasks = count($subtasksArray);
+                $completedSubtasks = collect($subtasksArray)->where('status', 'done')->count();
                 $completionRate = ($totalSubtasks > 0)
                     ? round(($completedSubtasks / $totalSubtasks) * 100)
-                    : 0;
-
-                $membersData[] = [
+                    : 0;                $membersData[] = [
                     'name' => $member ? $member->name : 'Unassigned',
                     'total_subtasks' => $totalSubtasks,
                     'completed_subtasks' => $completedSubtasks,
@@ -352,11 +360,12 @@ class ReportController extends Controller
             ->whereNotNull('parent_id')
             ->whereNotNull('assigned_to')
             ->pluck('assigned_to')
-            ->unique();
+            ->unique()
+            ->toArray(); // Convert LazyCollection to array
 
         $membersWithoutSubtasks = $teamMembers
             ->filter(function ($member) use ($membersWithSubtasks) {
-                return !$membersWithSubtasks->contains($member->id);
+                return !in_array($member->id, $membersWithSubtasks);
             })
             ->map(function ($member) {
                 return [
