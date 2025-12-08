@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\TeamController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\TasksController;
+use App\Http\Controllers\AIAssistantController;
 use App\Http\Controllers\SprintsController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\RetrospectiveController;
@@ -98,6 +99,17 @@ Route::middleware('auth')->group(function () {
     Route::post('/sprint', [SprintsController::class, 'store'])->name('sprint.store');
     Route::post('/sprint/cancel', [SprintsController::class, 'cancel'])->name('sprint.cancel');
 
+    // AI Assistant Routes
+    Route::post('/ai/start', [AIAssistantController::class, 'startSession'])->name('ai.start');
+    Route::post('/ai/chat/{session}', [AIAssistantController::class, 'sendMessage'])->name('ai.chat');
+    Route::post('/ai/us/save', [AIAssistantController::class, 'saveUserStories'])->name('ai.us.save');
+    Route::post('/ai/generate-us', [\App\Http\Controllers\AIGenerateController::class, 'generateUS'])->name('ai.generate-us');
+    Route::post('/ai/decompose-us', [AIAssistantController::class, 'decomposeUS'])->name('ai.decompose-us');
+    Route::get('/api/team-members-workload', [TasksController::class, 'getTeamMembersWorkload'])->name('api.team-members-workload');
+
+    // API Routes for AJAX
+    Route::get('/api/epics', [\App\Http\Controllers\EpicApiController::class, 'getEpicsJson'])->name('api.epics');
+
     // --- Team Management Routes ---
     Route::get('/team-management', [TeamController::class, 'index'])->name('team.management');
     Route::post('/team/add-member', [TeamController::class, 'addMember'])->name('team.addMember');
@@ -107,10 +119,10 @@ Route::middleware('auth')->group(function () {
     // Other Routes
     Route::get('/reports', [ReportController::class, 'index'])->name('reports');
     Route::view('/settings', 'pages.settings')->name('settings');
-    
+
     // User Profile Route
     Route::get('/profile', [UserProfileController::class, 'index'])->name('user.profile');
-    
+
     // Product Backlog (UI demo)
     // Route::view('/product-backlog', 'pages.product-backlog')->name('product.backlog');
 

@@ -624,7 +624,7 @@ class TasksController extends Controller
     /**
      * Hiển thị trang Task Board.
      */
-    public function taskBoard()
+    public function taskBoard(Request $request)
     {
         // Lấy người dùng đã đăng nhập
         $user = Auth::user();
@@ -664,7 +664,7 @@ class TasksController extends Controller
 
         // Lấy các task trong Product Backlog (chưa thuộc sprint nào)
     $backlogTasks = Tasks::whereNull('sprint_id')
-                 ->with('assignee')
+                 ->with(['assignee', 'epic'])
                  ->withCount('comments')
                              ->orderBy('created_at', 'desc')
                              ->get();
@@ -674,6 +674,37 @@ class TasksController extends Controller
 
          // Lấy danh sách thành viên trong team, loại trừ vai trò 'scrum_master'
         $teamMembers = $team->users()->wherePivot('roleInTeam', '!=', 'scrum_master')->get();
+
+        if ($request->wantsJson() || $request->query('format') === 'json') {
+            $futureSprints = $team->sprints()
+                ->where('status', 'planning')
+                ->orderBy('created_at', 'asc')
+                ->get();
+
+            $latestSprint = $team->sprints()
+                ->whereNotNull('end_date')
+                ->orderBy('end_date', 'desc')
+                ->first();
+
+            $minStartDate = $latestSprint && $latestSprint->end_date
+                ? \Carbon\Carbon::parse($latestSprint->end_date)->addDay()->format('Y-m-d')
+                : now()->format('Y-m-d');
+
+            $backlogPayload = $backlogTasks->map(function ($t) {
+                return [
+                    'id' => $t->id,
+                    'title' => $t->title,
+                    'epic_title' => $t->epic->title ?? null,
+                ];
+            });
+
+            return response()->json([
+                'backlogTasks' => $backlogPayload,
+                'activeSprint' => $activeSprint,
+                'futureSprints' => $futureSprints,
+                'minStartDate' => $minStartDate,
+            ]);
+        }
 
         // Gửi tất cả các biến cần thiết sang view
         return view('pages.taskBoard', compact(
@@ -1079,5 +1110,35 @@ class TasksController extends Controller
         } catch (\Exception $e) {
             return response()->json(['error' => 'An exception occurred.', 'message' => $e->getMessage()], 500);
         }
+    }
+
+    // API: Lấy danh sách team members với workload (tổng story points)
+    public function getTeamMembersWorkload()
+    {
+        $user = Auth::user();
+        $team = $user->team();
+
+        if (!$team) {
+            return response()->json(['members' => []]);
+        }
+
+        $teamMembers = $team->users()
+            ->where('roleInTeam', '!=', 'product_owner') // Loại PO
+            ->withCount(['tasks as total_story_points' => function ($query) {
+                $query->select(DB::raw('sum(storyPoints)'));
+            }])
+            ->get()
+            ->map(function ($member) {
+                return [
+                    'id' => $member->id,
+                    'name' => $member->name,
+                    'role' => $member->pivot->roleInTeam ?? 'developer',
+                    'workload' => (int) ($member->total_story_points ?? 0),
+                ];
+            })
+            ->sortBy('workload')
+            ->values();
+
+        return response()->json(['members' => $teamMembers]);
     }
 }

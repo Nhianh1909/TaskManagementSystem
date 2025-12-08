@@ -193,10 +193,20 @@ class SprintsController extends Controller
             $sprintModel->save();
 
             DB::commit();
+
+            if (request()->wantsJson() || request()->ajax()) {
+                return response()->json(['message' => 'Sprint đã được bắt đầu.', 'sprint' => $sprintModel]);
+            }
+
             return redirect()->route('sprint.create')->with('success', 'Sprint đã được bắt đầu.');
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Error starting sprint: ' . $e->getMessage());
+
+            if (request()->wantsJson() || request()->ajax()) {
+                return response()->json(['message' => 'Đã có lỗi xảy ra khi bắt đầu Sprint.'], 500);
+            }
+
             return back()->with('error', 'Đã có lỗi xảy ra khi bắt đầu Sprint.');
         }
     }

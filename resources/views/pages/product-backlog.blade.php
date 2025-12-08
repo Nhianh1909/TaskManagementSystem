@@ -152,7 +152,7 @@
                     </section>
                     <section>
                         <h3 class="text-sm text-gray-500 mb-3">Product Backlog</h3>
-                        <div class="space-y-4">
+                        <div class="space-y-4" data-epic-list>
                             {{--
                             // =================================================================================
                             //******************************************************************************** *
@@ -360,7 +360,7 @@
 @push('scripts')
 
 @include('pages.product-backlog.partials.scripts')
-
+@include('pages.product-backlog.partials.epic-list-refresh')
 
 @endpush
 

@@ -34,6 +34,7 @@ return [
             'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
         ],
     ],
+    // Gemini API (LLM) - đặt GEMINI_API_KEY trong .env
     'gemini' => [
         'key' => env('GEMINI_API_KEY'),
     ],

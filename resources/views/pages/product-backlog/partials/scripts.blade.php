@@ -209,8 +209,14 @@
                 description: description
             })
         })
-        .then(response => response.json())
-        .then(data => {
+        .then(async response => {
+            const data = await response.json().catch(() => ({}));
+
+            if (!response.ok) {
+                const msg = data.message || `HTTP ${response.status}`;
+                throw new Error(msg);
+            }
+
             console.log('Epic created successfully:', data);
             closeCreateModal(); // Đóng modal
             alert('Epic created successfully!');
@@ -218,7 +224,7 @@
         })
         .catch(error => {
             console.error('Error creating epic:', error);
-            alert('Failed to create epic. Please try again.');
+            alert(error.message || 'Failed to create epic. Please try again.');
         });
     }
 
@@ -1333,6 +1339,14 @@ async function deleteComment(commentId, storyId) {
     } catch (error) {
         console.error('Error deleting comment:', error);
         alert('Error deleting comment.');
+    // =================================================================================
+    // Listen for AI-saved US event to reload backlog without full page refresh
+    // =================================================================================
+    window.addEventListener('us-saved', () => {
+        console.log('🔄 US saved via AI, reloading page...');
+        location.reload();
+    });
+
     }
 }
 

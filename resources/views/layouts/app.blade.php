@@ -7,6 +7,12 @@
     <meta name="description" content="Professional Scrum-based task management with modern UI, drag-and-drop boards, and team collaboration tools">
 
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    @php
+        $currentUser = Auth::user();
+        $currentTeam = $currentUser?->teams()->first();
+        $currentRoleInTeam = $currentTeam ? $currentTeam->users()->find($currentUser->id)?->pivot->roleInTeam : null;
+    @endphp
+    <meta name="user-role" content="{{ $currentRoleInTeam ?? '' }}">
     <!-- Schema Markup for Tasks -->
     @verbatim
     <script type="application/ld+json">
@@ -37,6 +43,9 @@
     @yield('content')
     {{-- @include('pages.settings') --}}
 {{-- ----------------------------------- --}}
+
+    {{-- AI Floating Button - Available on all pages --}}
+    @include('components.ai-floating-button')
 
     <script>
         // Initialize particles
