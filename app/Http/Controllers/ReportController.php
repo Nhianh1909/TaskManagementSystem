@@ -313,7 +313,8 @@ class ReportController extends Controller
         // ✅ Lấy tất cả User Stories trong sprint với subtasks đã eager load
         $userStories = $sprint->tasks()
             ->whereNull('parent_id')
-            ->with(['subTasks.assignee'])
+            // Eager load subtask assignee + status to detect completion via is_done/completed_at
+            ->with(['subTasks.assignee', 'subTasks.status'])
             ->orderBy('order_index')
             ->get();
 
@@ -328,16 +329,21 @@ class ReportController extends Controller
             $membersData = [];
 
             foreach ($subtasksByMember as $memberId => $subtasks) {
-                // $subtasks is a Collection, convert to array safely
-                $subtasksArray = $subtasks->all();
-
                 $member = $subtasks->first()->assignee;
 
-                $totalSubtasks = count($subtasksArray);
-                $completedSubtasks = collect($subtasksArray)->where('status', 'done')->count();
+                $totalSubtasks = $subtasks->count();
+                // Consider a subtask completed if:
+                // - its status column has is_done = true, or
+                // - it has a non-null completed_at timestamp
+                $completedSubtasks = $subtasks->filter(function ($st) {
+                    return ($st->status && $st->status->is_done) || $st->completed_at;
+                })->count();
+
                 $completionRate = ($totalSubtasks > 0)
                     ? round(($completedSubtasks / $totalSubtasks) * 100)
-                    : 0;                $membersData[] = [
+                    : 0;
+
+                $membersData[] = [
                     'name' => $member ? $member->name : 'Unassigned',
                     'total_subtasks' => $totalSubtasks,
                     'completed_subtasks' => $completedSubtasks,

@@ -52,6 +52,32 @@
             <p class="mt-2 text-[11px] text-gray-500">Mẹo: Hỏi "Tạo US cho Epic Payment"</p>
         </div>
     </div>
+
+    {{-- Modal Edit User Stories (edit: added modal for better editing UX instead of small inline form in chat) --}}
+    <div id="edit-us-modal" class="fixed inset-0 bg-black bg-opacity-50 z-[60] hidden items-center justify-center">
+        <div class="bg-white rounded-lg shadow-2xl w-11/12 max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+            {{-- Modal Header (edit: modal header displaying approach name being edited) --}}
+            <div class="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-indigo-500 to-purple-600 text-white">
+                <h3 class="text-lg font-semibold">✏️ Edit User Stories</h3>
+                <button id="modal-close-btn" class="text-white/80 hover:text-white text-2xl leading-none">&times;</button>
+            </div>
+
+            {{-- Modal Body (edit: scrollable content displaying US list for editing) --}}
+            <div id="modal-edit-content" class="flex-1 overflow-y-auto p-6 space-y-4">
+                {{-- Content will be rendered by JS --}}
+            </div>
+
+            {{-- Modal Footer (edit: save and cancel buttons at bottom of modal) --}}
+            <div class="flex gap-3 px-6 py-4 bg-gray-50 border-t">
+                <button id="modal-save-btn" class="flex-1 px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium">
+                    💾 Save All
+                </button>
+                <button id="modal-cancel-btn" class="px-4 py-2.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition font-medium">
+                    ✖️ Cancel
+                </button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <style>
@@ -333,6 +359,18 @@ document.addEventListener('DOMContentLoaded', function() {
         chat.style.display = 'none';
     });
 
+    // Modal event listeners (edit: add event listeners for edit modal)
+    document.getElementById('modal-close-btn').addEventListener('click', cancelEdit);
+    document.getElementById('modal-cancel-btn').addEventListener('click', cancelEdit);
+    document.getElementById('modal-save-btn').addEventListener('click', saveEditedApproach);
+
+    // Close modal when clicking backdrop (edit: click outside modal to close)
+    document.getElementById('edit-us-modal').addEventListener('click', (e) => {
+        if (e.target.id === 'edit-us-modal') {
+            cancelEdit();
+        }
+    });
+
     // Clear chat history
     const chatClear = document.getElementById('ai-chat-clear');
     chatClear.addEventListener('click', () => {
@@ -514,12 +552,32 @@ document.addEventListener('DOMContentLoaded', function() {
         if (indicator) indicator.remove();
     }
 
+    // Helper: format ISO timestamps (e.g., 2026-01-14T00:00:00.000000Z) to local YYYY-MM-DD
+    function formatLocalDate(str) {
+        try {
+            const d = new Date(str);
+            if (!isNaN(d.getTime())) {
+                const offsetMs = d.getTimezoneOffset() * 60000;
+                const local = new Date(d.getTime() - offsetMs);
+                return local.toISOString().split('T')[0];
+            }
+        } catch (_) {}
+        return str;
+    }
+
     function appendApproaches(approaches) {
         const area = document.getElementById('ai-chat-messages');
         const container = document.createElement('div');
         container.className = 'space-y-3 pl-10 mb-3';
 
         approaches.forEach((approach, idx) => {
+            // Normalize story points so UI always sees story_point
+            const normalizedStories = (approach.stories || []).map(s => ({
+                ...s,
+                story_point: s.story_point ?? s.points ?? 0
+            }));
+            approach.stories = normalizedStories;
+
             const card = document.createElement('div');
             card.className = 'bg-gradient-to-r from-blue-50 to-indigo-50 border border-indigo-200 rounded-lg p-3 text-xs hover:shadow-md transition';
             card.setAttribute('data-approach-idx', idx); // For restore
@@ -527,7 +585,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const title = approach.name || `Approach ${idx + 1}`;
             const desc = approach.description || '';
             const points = approach.total_points || 0;
-            const storiesHtml = (approach.stories || [])
+            const storiesHtml = normalizedStories
                 .slice(0, 2)
                 .map(s => `<div class="text-gray-600">• ${escapeHtml(s.title || '')}</div>`)
                 .join('');
@@ -566,74 +624,98 @@ document.addEventListener('DOMContentLoaded', function() {
         saveChatHistory();
     }
 
-    function editApproach(approach, idx) {
-        appendUserMessage(`✏️ Chỉnh sửa "${approach.name}"`);
+    // Variable to store approach being edited (edit: for modal access)
+    let currentEditingApproach = null;
 
-        // Display editable form for each US
-        const area = document.getElementById('ai-chat-messages');
-        const editContainer = document.createElement('div');
-        editContainer.className = 'pl-10 space-y-2';
+    // Edit approach - Show modal (edit: instead of inline form, now shows modal for better editing)
+    function editApproach(approach, idx) {
+        // Save approach info to temp variable (edit: for modal use)
+        currentEditingApproach = approach;
+
+        // Render modal content (edit: display edit form in modal)
+        const modalContent = document.getElementById('modal-edit-content');
 
         let editFormHtml = `
-            <div class="bg-white border border-gray-300 rounded-lg p-3 text-xs">
-                <div class="font-semibold text-gray-700 mb-2">Chỉnh sửa User Stories:</div>
-                <div id="edit-stories-list" class="space-y-3">
+            <div class="space-y-4">
+                <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+                    <div class="font-semibold text-indigo-900 mb-1">📝 Approach: ${escapeHtml(approach.name)}</div>
+                    <div class="text-sm text-indigo-700">Total: ${approach.total_points} Story Points</div>
+                </div>
         `;
 
         approach.stories.forEach((story, idx) => {
             editFormHtml += `
-                <div class="border border-gray-200 rounded p-2 bg-gray-50">
-                    <input type="text"
-                           value="${escapeHtml(story.title || '')}"
-                           placeholder="US Title"
-                           class="w-full px-2 py-1 text-xs border border-gray-300 rounded mb-1"
-                           id="story-title-${idx}">
-                    <textarea
-                           placeholder="Description"
-                           class="w-full px-2 py-1 text-xs border border-gray-300 rounded mb-1"
-                           rows="2"
-                           id="story-desc-${idx}">${escapeHtml(story.description || '')}</textarea>
-                    <div class="flex gap-2">
-                        <input type="number"
-                               value="${story.story_point || 0}"
-                               placeholder="Points"
-                               class="w-20 px-2 py-1 text-xs border border-gray-300 rounded"
-                               id="story-points-${idx}"
-                               min="0">
-                        <select class="flex-1 px-2 py-1 text-xs border border-gray-300 rounded" id="story-priority-${idx}">
-                            <option value="low" ${story.priority === 'low' ? 'selected' : ''}>Low</option>
-                            <option value="medium" ${story.priority === 'medium' ? 'selected' : ''}>Medium</option>
-                            <option value="high" ${story.priority === 'high' ? 'selected' : ''}>High</option>
-                        </select>
+                <div class="border border-gray-300 rounded-lg p-4 bg-white shadow-sm">
+                    <div class="text-sm font-medium text-gray-700 mb-3">User Story #${idx + 1}</div>
+
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-600 mb-1.5">📝 Title</label>
+                            <input type="text"
+                                   value="${escapeHtml(story.title || '')}"
+                                   placeholder="Enter User Story title..."
+                                   class="w-full px-3 py-2 text-base border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                   id="story-title-${idx}">
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-600 mb-1.5">📋 Description</label>
+                            <textarea
+                                   placeholder="Enter description..."
+                                   class="w-full px-3 py-2 text-base border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
+                                   rows="4"
+                                   id="story-desc-${idx}">${escapeHtml(story.description || '')}</textarea>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-600 mb-1.5">🎯 Story Points</label>
+                                <input type="number"
+                                       value="${story.story_point || 0}"
+                                       placeholder="Points"
+                                       class="w-full px-3 py-2 text-base border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                       id="story-points-${idx}"
+                                       min="0">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-600 mb-1.5">⭐ Priority</label>
+                                <select class="w-full px-3 py-2 text-base border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400" id="story-priority-${idx}">
+                                    <option value="low" ${story.priority === 'low' ? 'selected' : ''}>🟢 Low</option>
+                                    <option value="medium" ${story.priority === 'medium' ? 'selected' : ''}>🟡 Medium</option>
+                                    <option value="high" ${story.priority === 'high' ? 'selected' : ''}>🔴 High</option>
+                                </select>
+                            </div>
+                        </div>
                     </div>
                 </div>
             `;
         });
 
-        editFormHtml += `
-                </div>
-                <div class="flex gap-2 mt-3 pt-2 border-t">
-                    <button id="btn-save-edited" class="flex-1 px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition text-xs font-medium">
-                        💾 Lưu tất cả
-                    </button>
-                    <button id="btn-cancel-edit" class="px-3 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition text-xs">
-                        ✖️ Hủy
-                    </button>
-                </div>
-            </div>
-        `;
+        editFormHtml += `</div>`;
+        modalContent.innerHTML = editFormHtml;
 
-        editContainer.innerHTML = editFormHtml;
-        area.appendChild(editContainer);
+        // Show modal (edit: use flex to display modal)
+        const modal = document.getElementById('edit-us-modal');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
 
-        // Attach event listeners
-        document.getElementById('btn-save-edited').onclick = () => saveEditedApproach(approach.name, approach.stories.length);
-        document.getElementById('btn-cancel-edit').onclick = cancelEdit;
-
-        area.scrollTop = area.scrollHeight;
+        // Focus on first title (edit: auto focus when opening modal)
+        setTimeout(() => {
+            const firstInput = modalContent.querySelector('#story-title-0');
+            if (firstInput) firstInput.focus();
+        }, 100);
     }
 
-    function saveEditedApproach(approachName, storyCount) {
+    // Save edited approach from modal (edit: collect data from modal instead of inline form)
+    function saveEditedApproach() {
+        if (!currentEditingApproach) {
+            alert('⚠️ Approach information not found!');
+            return;
+        }
+
+        const approachName = currentEditingApproach.name;
+        const storyCount = currentEditingApproach.stories.length;
+
         const stories = [];
         for (let i = 0; i < storyCount; i++) {
             const title = document.getElementById(`story-title-${i}`)?.value;
@@ -652,13 +734,18 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         if (stories.length === 0) {
-            appendAIMessage('❌ Vui lòng nhập ít nhất 1 User Story');
+            alert('⚠️ Please enter at least 1 User Story!');
             return;
         }
 
-        appendUserMessage(`💾 Lưu ${stories.length} User Stories đã chỉnh sửa`);
+        // Close modal first (edit: hide modal before sending request)
+        closeEditModal();
+
+        // Show save notification in chat
+        appendUserMessage(`💾 Saving ${stories.length} edited User Stories`);
         showTypingIndicator();
 
+        // Gửi request lưu về server (sửa: giữ nguyên logic lưu)
         fetch('/ai/us/save', {
             method: 'POST',
             headers: {
@@ -674,8 +761,6 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(res => res.json())
         .then(data => {
             removeTypingIndicator();
-            // Close edit form
-            closeEditForm();
             // Show success message
             appendAIMessage(data.message);
             if (data.suggestions) {
@@ -699,19 +784,18 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    function closeEditForm() {
-        // Find and remove the edit form container
-        const editContainers = document.querySelectorAll('.pl-10.space-y-2');
-        editContainers.forEach(container => {
-            if (container.querySelector('#btn-save-edited')) {
-                container.remove();
-            }
-        });
+    // Close edit modal (edit: new function to close modal)
+    function closeEditModal() {
+        const modal = document.getElementById('edit-us-modal');
+        modal.classList.remove('flex');
+        modal.classList.add('hidden');
+        currentEditingApproach = null; // Reset temp data
     }
 
+    // Cancel edit (edit: close modal and show notification)
     function cancelEdit() {
-        closeEditForm();
-        appendAIMessage('❌ Đã hủy chỉnh sửa. Bạn có thể chọn approach khác.');
+        closeEditModal();
+        appendAIMessage('❌ Edit cancelled. You can select another approach.');
     }
 
     function selectApproach(approach, idx) {
@@ -720,6 +804,11 @@ document.addEventListener('DOMContentLoaded', function() {
         // Lưu approach được chọn vào session storage
         sessionStorage.setItem('selectedApproach', JSON.stringify(approach));
         sessionStorage.setItem('selectedApproachName', approach.name);
+
+        console.log('📤 Sending stories to save:', {
+            stories: approach.stories,
+            approachName: approach.name
+        });
 
         showTypingIndicator();
 
@@ -1023,13 +1112,29 @@ document.addEventListener('DOMContentLoaded', function() {
         const lower = message.toLowerCase();
         if (!lower.includes('tạo') || !lower.includes('sprint')) return false;
 
-        const durationMatch = message.match(/(\d+)\s*ngày/i);
+        // Extract duration: supports "7 ngày" or "7 days"
+        const durationMatch = message.match(/(\d+)\s*(ngày|days)/i);
         const days = durationMatch ? parseInt(durationMatch[1], 10) : 7;
 
         let name = null;
-        const nameMatch = message.match(/sprint\s+([^,]+?)(?:\s+trong|\s+vòng|\s*\d+\s*ngày|$)/i);
-        if (nameMatch && nameMatch[1]) {
-            name = nameMatch[1].trim();
+        // Prefer name inside parentheses: "sprint (My Name)"
+        const parenMatch = message.match(/sprint\s*\(\s*([^)]*?)\s*\)/i);
+        if (parenMatch && parenMatch[1]) {
+            name = parenMatch[1].trim();
+        } else {
+            // Fallback: capture text after 'sprint' until a stop word (với/with/trong/vòng) or duration
+            const nameMatch = message.match(/sprint\s+([^,]+?)(?:\s+với|\s+with|\s+trong|\s+vòng|\s*\d+\s*(ngày|days)|$)/i);
+            if (nameMatch && nameMatch[1]) {
+                name = nameMatch[1].trim();
+            }
+        }
+
+        // Clean trailing artifacts like 'với', punctuation, unmatched parentheses
+        if (name) {
+            name = name
+                .replace(/\s*(với|with)\s*$/i, '')
+                .replace(/[\s,;:]+$/g, '')
+                .replace(/^\)\s*|\s*\)$/g, '');
         }
         if (!name) {
             name = `Sprint ${new Date().toLocaleDateString('vi-VN')}`;
@@ -1045,6 +1150,19 @@ document.addEventListener('DOMContentLoaded', function() {
         const getLocalISO = (d) => {
             const offsetMs = d.getTimezoneOffset() * 60000;
             return new Date(d.getTime() - offsetMs).toISOString().split('T')[0];
+        };
+
+        // Format any ISO timestamp (e.g., 2026-01-21T00:00:00.000000Z) to local YYYY-MM-DD
+        const formatLocalDate = (str) => {
+            try {
+                const d = new Date(str);
+                if (!isNaN(d.getTime())) {
+                    const offsetMs = d.getTimezoneOffset() * 60000;
+                    const local = new Date(d.getTime() - offsetMs);
+                    return local.toISOString().split('T')[0];
+                }
+            } catch (_) {}
+            return str; // fallback
         };
 
         appendAIMessage(`🛠️ Đang tạo Future Sprint "${escapeHtml(name)}" trong ${days} ngày...`);
@@ -1095,7 +1213,9 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             quickSprintContext.sprint = data.sprint;
-            appendAIMessage(`✅ Đã tạo Future Sprint "${escapeHtml(name)}" (${data.sprint.start_date || startISO} → ${data.sprint.end_date || endISO}).`);
+            const startDisp = data.sprint.start_date ? formatLocalDate(data.sprint.start_date) : startISO;
+            const endDisp = data.sprint.end_date ? formatLocalDate(data.sprint.end_date) : endISO;
+            appendAIMessage(`✅ Đã tạo Future Sprint "${escapeHtml(name)}" (${startDisp} → ${endDisp}).`);
             renderUSOptionsPrompt();
         })
         .catch(err => {
@@ -1111,21 +1231,31 @@ document.addEventListener('DOMContentLoaded', function() {
         const area = document.getElementById('ai-chat-messages');
         const wrapper = document.createElement('div');
         wrapper.className = 'flex gap-2 pl-10';
+
+        // Use unique IDs to avoid conflicts after reload
+        const uniqueId = 'us-options-' + Date.now();
+        const btnShowId = uniqueId + '-show';
+        const btnManualId = uniqueId + '-manual';
+
         wrapper.innerHTML = `
             <div class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-sm font-bold">AI</div>
             <div class="bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-sm text-sm space-y-2">
                 <div class="font-semibold text-gray-700">Chọn cách thêm US vào Sprint:</div>
                 <div class="flex flex-col gap-2">
-                    <button id="btn-us-show" class="px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-xs font-medium">Hiển thị US để chọn (modal)</button>
-                    <button id="btn-us-manual" class="px-3 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 text-xs">Tự set up (thủ công)</button>
+                    <button id="${btnShowId}" class="px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-xs font-medium">Hiển thị US để chọn (modal)</button>
+                    <button id="${btnManualId}" class="px-3 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 text-xs">Tự set up (thủ công)</button>
                 </div>
             </div>
         `;
         area.appendChild(wrapper);
         area.scrollTop = area.scrollHeight;
 
-        document.getElementById('btn-us-show').onclick = () => loadBacklogAndRender(true);
-        document.getElementById('btn-us-manual').onclick = () => {
+        // Attach listeners to newly created elements immediately
+        const btnShow = wrapper.querySelector(`#${btnShowId}`);
+        const btnManual = wrapper.querySelector(`#${btnManualId}`);
+
+        if (btnShow) btnShow.onclick = () => loadBacklogAndRender(true);
+        if (btnManual) btnManual.onclick = () => {
             appendAIMessage('👌 Bạn có thể tự set up Sprint trong Product Backlog.');
             refreshSprintsSnapshot(renderStartSprintPrompt);
         };
@@ -1174,14 +1304,18 @@ document.addEventListener('DOMContentLoaded', function() {
             <div class="mb-4">
                 <div class="font-semibold text-indigo-700 text-base mb-2">${escapeHtml(epic)}</div>
                 <div class="space-y-2">
-                    ${tasks.map(task => `
+                    ${tasks.map(task => {
+                        const points = task.storyPoints || task.story_point || 0;
+                        return `
                         <label class="flex items-start gap-2 p-2 rounded hover:bg-gray-100 cursor-pointer text-sm border-b border-gray-100">
                             <input type="checkbox" class="us-select-checkbox mt-1" value="${task.id}">
-                            <span class="text-gray-800">
+                            <span class="flex-1 text-gray-800">
                                 <span class="font-medium">${escapeHtml(task.title || 'User Story')}</span>
+                                <span class="ml-2 px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-semibold">${points} pts</span>
                             </span>
                         </label>
-                    `).join('')}
+                        `;
+                    }).join('')}
                 </div>
             </div>
         `).join('');
@@ -1270,6 +1404,7 @@ document.addEventListener('DOMContentLoaded', function() {
         Promise.all(requests)
             .then(() => {
                 appendAIMessage('✅ Đã gán US vào Sprint.');
+                // Refresh sprint list without page reload for smooth UX
                 refreshSprintsSnapshot(renderStartSprintPrompt);
             })
             .catch(err => {
@@ -1283,30 +1418,10 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(data => {
                 quickSprintContext.activeSprint = data.activeSprint || null;
                 quickSprintContext.futureSprints = data.futureSprints || [];
+                console.log('refreshSprintsSnapshot data:', { activeSprint: quickSprintContext.activeSprint, futureSprints: quickSprintContext.futureSprints });
+
+                // Always call the callback to render
                 if (typeof next === 'function') next();
-                // Nếu không có sprint đang chạy, thêm nút hiển thị danh sách sprint vào chat
-                if (!quickSprintContext.activeSprint) {
-                    showSprintListOption();
-                }
-                // Hàm hiển thị nút "Hiển thị danh sách sprint" khi không có sprint đang chạy
-                function showSprintListOption() {
-                    const area = document.getElementById('ai-chat-messages');
-                    const wrapper = document.createElement('div');
-                    wrapper.className = 'flex gap-2 pl-10';
-                    wrapper.innerHTML = `
-                        <div class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-sm font-bold">AI</div>
-                        <div class="bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-sm text-sm">
-                            <button id="btn-show-sprint-list" class="px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-xs font-medium">Hiển thị danh sách Sprint</button>
-                        </div>
-                    `;
-                    area.appendChild(wrapper);
-                    area.scrollTop = area.scrollHeight;
-                    wrapper.querySelector('#btn-show-sprint-list').onclick = () => {
-                        // Xóa nút sau khi bấm
-                        wrapper.remove();
-                        renderStartSprintPrompt();
-                    };
-                }
             })
             .catch(err => {
                 appendAIMessage('⚠️ Không tải được danh sách sprint: ' + err.message);
@@ -1356,14 +1471,20 @@ document.addEventListener('DOMContentLoaded', function() {
                 dim = 'opacity-50 cursor-not-allowed';
             }
 
+            const startDisp = sp.start_date ? formatLocalDate(sp.start_date) : '--';
+            const endDisp = sp.end_date ? formatLocalDate(sp.end_date) : '--';
+
             return `
                 <div class="border border-gray-200 rounded p-2 flex items-center justify-between text-xs ${dim}">
-                    <div>
+                    <div class="flex-1">
                         <div class="font-semibold text-gray-800">${escapeHtml(sp.name)}</div>
-                        <div class="text-gray-600">${sp.start_date || '--'} → ${sp.end_date || '--'}</div>
+                        <div class="text-gray-600">${startDisp} → ${endDisp}</div>
                         ${lockNote}
                     </div>
-                    <button class="btn-start-sprint px-2 py-1 ${btnStyle} rounded text-xs" data-id="${sp.id}" ${disable}>${btnLabel}</button>
+                    <div class="flex gap-1">
+                        <button class="btn-add-us-sprint px-2 py-1 bg-green-500 text-white hover:bg-green-600 rounded text-xs" data-id="${sp.id}" title="Thêm US">+</button>
+                        <button class="btn-start-sprint px-2 py-1 ${btnStyle} rounded text-xs" data-id="${sp.id}" ${disable}>${btnLabel}</button>
+                    </div>
                 </div>
             `;
         }).join('');
@@ -1390,6 +1511,20 @@ document.addEventListener('DOMContentLoaded', function() {
                     return;
                 }
                 startSprint(targetId);
+            };
+        });
+
+        wrapper.querySelectorAll('.btn-add-us-sprint').forEach(btn => {
+            btn.onclick = () => {
+                const sprintId = btn.dataset.id;
+                const sprint = quickSprintContext.futureSprints.find(s => s.id == sprintId);
+                if (!sprint) {
+                    appendAIMessage('❌ Không tìm thấy Sprint.');
+                    return;
+                }
+                quickSprintContext.sprint = sprint;
+                appendAIMessage(`📋 Đang tải US backlog để thêm vào "${escapeHtml(sprint.name)}"...`);
+                loadBacklogAndRender(true);
             };
         });
     }
@@ -1483,6 +1618,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 {label: '📋 Tạo thêm US', action: 'generate_us'},
                 {label: '📅 Xem Sprint Planning', action: 'goto_sprint_planning'}
             ]);
+
+            // Reload page to reflect newly created sprint in UI
+            setTimeout(() => {
+                try { window.location.reload(); } catch (_) {}
+            }, 400);
         })
         .catch(err => {
             removeTypingIndicator();
@@ -1497,7 +1637,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function handleGenerateMoreUS() {
-        appendAIMessage('📋 Chọn Epic để tạo thêm User Stories:');
+        // Don't show AI message here, let backend handle the response
         showTypingIndicator();
 
         // Fetch epic list
@@ -1548,6 +1688,14 @@ document.addEventListener('DOMContentLoaded', function() {
         appendUserMessage(message);
         appendAIMessage('🔄 Đang phân tích User Story và tạo gợi ý subtasks...');
 
+        // If the AI call takes too long, show a gentle lag hint
+        let _decomposeDone = false;
+        const _lagTimer = setTimeout(() => {
+            if (!_decomposeDone) {
+                appendAIMessage('⏳ Đợi xíu nhé, AI đang xử lý hơi lâu một chút...');
+            }
+        }, 10000);
+
         fetch('/ai/decompose-us', {
             method: 'POST',
             headers: {
@@ -1558,6 +1706,8 @@ document.addEventListener('DOMContentLoaded', function() {
         })
         .then(res => res.json())
         .then(data => {
+            _decomposeDone = true;
+            try { clearTimeout(_lagTimer); } catch(_) {}
             if (data.error) {
                 appendAIMessage('❌ ' + data.error);
                 return;
@@ -1565,6 +1715,8 @@ document.addEventListener('DOMContentLoaded', function() {
             renderSubtasksSuggestions(data);
         })
         .catch(err => {
+            _decomposeDone = true;
+            try { clearTimeout(_lagTimer); } catch(_) {}
             console.error('Decompose error:', err);
             appendAIMessage('❌ Lỗi khi phân rã US: ' + err.message);
         });
@@ -1731,10 +1883,23 @@ document.addEventListener('DOMContentLoaded', function() {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'Accept': 'application/json',
                 'X-CSRF-TOKEN': csrfToken,
             },
             body: JSON.stringify(st)
-        }).then(res => res.json()));
+        }).then(async res => {
+            const text = await res.text();
+            let data = null;
+            try { data = JSON.parse(text); } catch (_) {
+                // Not JSON (likely HTML error/redirect)
+                data = { error: `HTTP ${res.status}`, raw: text };
+            }
+            if (!res.ok) {
+                const msg = data?.message || data?.error || `HTTP ${res.status}`;
+                throw new Error(msg);
+            }
+            return data;
+        }));
 
         Promise.all(requests)
             .then(results => {

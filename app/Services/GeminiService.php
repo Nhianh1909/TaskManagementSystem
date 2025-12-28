@@ -7,7 +7,8 @@ use Illuminate\Support\Facades\Http;
 class GeminiService
 {
     protected string $apiKey;
-    protected string $model = 'gemini-1.5-flash';
+    // Dùng model lite để tránh quota: gemini-2.0-flash-lite
+    protected string $model = 'gemini-2.5-flash';
     protected string $endpoint = 'https://generativelanguage.googleapis.com/v1beta/models';
 
     public function __construct()
@@ -20,17 +21,19 @@ class GeminiService
      */
     public function generateContent(string $prompt): ?string
     {
+        // ---------------------
+
         if (!$this->apiKey) {
-            return 'Lỗi: GEMINI_API_KEY chưa được cấu hình';
+            return 'ERROR: GEMINI_API_KEY chưa được cấu hình';
         }
 
         try {
             \Log::info('🔄 Calling Gemini API...');
-            
+
             $response = Http::withHeaders([
                 'X-goog-api-key' => $this->apiKey,
             ])->timeout(30)->post(
-                "{$this->endpoint}/gemini-2.0-flash:generateContent",
+                "{$this->endpoint}/{$this->model}:generateContent",
                 [
                     'contents' => [
                         [
@@ -61,15 +64,13 @@ class GeminiService
             \Log::error($error);
             return $error;
         } catch (\Exception $e) {
-            $error = 'Lỗi khi gọi Gemini: ' . $e->getMessage();
+            $error = 'ERROR: Lỗi khi gọi Gemini: ' . $e->getMessage();
             \Log::error($error);
             return $error;
         }
     }
 
-    /**
-     * Gọi Gemini với messages (OpenAI-like format)
-     */
+
     public function chat(array $messages): array
     {
         $prompt = $this->formatMessagesToPrompt($messages);
@@ -93,6 +94,7 @@ class GeminiService
     {
         $prompt = '';
         foreach ($messages as $msg) {
+            //ucfirst để in hoa chữ cái đầu role
             $role = ucfirst($msg['role'] ?? 'user');
             $content = $msg['content'] ?? '';
             $prompt .= "$role: $content\n\n";
@@ -147,4 +149,6 @@ class GeminiService
                "  ]\n" .
                "}";
     }
+
 }
+

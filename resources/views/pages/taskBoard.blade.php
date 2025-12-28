@@ -20,11 +20,11 @@
                     <button onclick="openAddColumnModal()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300 transition-colors">
                         <i class="fas fa-columns mr-2"></i>Add Column
                     </button>
-                    @if($userRoleInTeam === 'product_owner')
+                    {{-- @if($userRoleInTeam === 'product_owner')
                     <button onclick="openTaskModal()" class="gradient-btn text-white px-6 py-2 rounded-lg font-semibold">
                         <i class="fas fa-plus mr-2"></i>Add Task
                     </button>
-                    @endif
+                    @endif --}}
                 </div>
                 @endif
             </div>

@@ -28,9 +28,9 @@ class AIAssistantController extends Controller
         if (!$user) {
             return response()->json(['error' => 'Vui lòng đăng nhập trước'], 401);
         }
-        
+
         $team = $user->teams()->first();
-        
+
         $session = AIChatSession::create([
             'user_id' => $user->id,
             'team_id' => $team?->id,
@@ -95,6 +95,7 @@ class AIAssistantController extends Controller
     {
         // Extract US ID hoặc tên từ message: "Phân rã US #123" hoặc "Phân rã US: Đăng nhập"
         $usId = null;
+        //d+
         if (preg_match('/#(\d+)/', $userMessage, $matches)) {
             $usId = (int) $matches[1];
         }
@@ -270,6 +271,15 @@ class AIAssistantController extends Controller
             ];
         }
 
+        if (isset($approaches['__error'])) {
+            return [
+                'message' => '❌ ' . $approaches['__error'],
+                'suggestions' => [
+                    ['label' => '🔄 Thử lại', 'action' => 'regenerate_us'],
+                ],
+            ];
+        }
+
         return [
             'message' => "✨ Tôi đề xuất 3 phương án User Stories cho Epic '{$epic->title}':",
             'approaches' => $approaches,
@@ -284,16 +294,28 @@ class AIAssistantController extends Controller
     protected function callGeminiForApproaches($epic, $team)
     {
         $prompt = $this->buildPromptForEpic($epic, $team);
-        
+
         try {
             $content = $this->gemini->generateContent($prompt);
-            
+
             if (!$content) {
                 return null;
             }
 
+            // Nếu service trả về ERROR: ... thì chuyển về null kèm message
+            if (is_string($content) && str_starts_with($content, 'ERROR:')) {
+                return ['__error' => $content];
+            }
+
             // Parse JSON từ Gemini response
             $approaches = $this->parseApproachesFromResponse($content);
+
+            // Log parsed data for debugging
+            \Log::info('🔍 Parsed approaches before normalize:', [
+                'approaches' => $approaches,
+                'count' => is_array($approaches) ? count($approaches) : 0
+            ]);
+
             return $approaches;
         } catch (\Exception $e) {
             \Log::error('Gemini error: ' . $e->getMessage());
@@ -304,48 +326,64 @@ class AIAssistantController extends Controller
     // Parse Gemini response thành array approaches
     protected function parseApproachesFromResponse(string $response): ?array
     {
-        // Thử extract JSON từ response
-        if (preg_match('/\[[\s\S]*\]/m', $response, $matches)) {
-            try {
-                $data = json_decode($matches[0], true);
-                if (is_array($data)) {
-                    return $data;
-                }
-            } catch (\Exception $e) {
-                \Log::error('JSON parse error: ' . $e->getMessage());
+        $clean = trim($response);
+
+        // Helper to safely decode JSON
+        $decodeJson = function ($jsonText) {
+            $jsonText = trim($jsonText);
+            $data = json_decode($jsonText, true);
+            return is_array($data) ? $data : null;
+        };
+
+        // 1) Try decode whole response directly
+        if ($decoded = $decodeJson($clean)) {
+            return $this->normalizeApproaches($decoded);
+        }
+
+        // 2) Try extract from fenced ```json ... ``` blocks
+        if (preg_match('/```json\s*([\s\S]*?)```/i', $clean, $matches)) {
+            if ($decoded = $decodeJson($matches[1])) {
+                return $this->normalizeApproaches($decoded);
             }
         }
 
-        // Fallback: tạo placeholder dari response
-        return [
-            [
-                'name' => 'Simple Approach',
-                'description' => 'Phương án đơn giản',
-                'stories' => [
-                    ['title' => 'US 1: ' . substr($response, 0, 50), 'points' => 3],
-                ],
-                'total_points' => 3,
-            ],
-            [
-                'name' => 'Standard Approach',
-                'description' => 'Phương án tiêu chuẩn',
-                'stories' => [
-                    ['title' => 'US 1: ' . substr($response, 0, 50), 'points' => 3],
-                    ['title' => 'US 2: Thêm chi tiết', 'points' => 5],
-                ],
-                'total_points' => 8,
-            ],
-            [
-                'name' => 'Comprehensive Approach',
-                'description' => 'Phương án toàn diện',
-                'stories' => [
-                    ['title' => 'US 1: ' . substr($response, 0, 50), 'points' => 3],
-                    ['title' => 'US 2: Thêm chi tiết', 'points' => 5],
-                    ['title' => 'US 3: Thêm tính năng', 'points' => 5],
-                ],
-                'total_points' => 13,
-            ],
-        ];
+        // 3) Try extract first JSON array in the text
+        if (preg_match('/\[[\s\S]*\]/m', $clean, $matches)) {
+            if ($decoded = $decodeJson($matches[0])) {
+                return $this->normalizeApproaches($decoded);
+            }
+        }
+
+        // If parsing fails completely, return null so caller can show an error instead of noisy placeholders
+        \Log::warning('Gemini parse failed for approaches', [
+            'preview' => substr($response, 0, 200)
+        ]);
+
+        return null;
+    }
+
+    // Normalize approaches to ensure all stories have points field
+    protected function normalizeApproaches($approaches): array
+    {
+        if (!is_array($approaches)) return [];
+
+        $normalized = array_map(function ($approach) {
+            if (isset($approach['stories']) && is_array($approach['stories'])) {
+                $approach['stories'] = array_map(function ($story) {
+                    // Ensure each story has a points field (default 0 if missing)
+                    if (!isset($story['points'])) {
+                        $story['points'] = 0;
+                    }
+                    return $story;
+                }, $approach['stories']);
+            }
+            return $approach;
+        }, $approaches);
+
+        // Log normalized data
+        \Log::info('✅ Normalized approaches:', ['normalized' => $normalized]);
+
+        return $normalized;
     }
 
     // Build prompt cho Gemini
@@ -357,19 +395,21 @@ class AIAssistantController extends Controller
                "Description: {$epic->description}\n\n" .
                "Yêu cầu:\n" .
                "1. Mỗi approach có 3-5 User Stories\n" .
-               "2. Simple: bao gồm tính năng cơ bản (3-8 points)\n" .
-               "3. Standard: bao gồm tính năng chính (8-13 points)\n" .
-               "4. Comprehensive: bao gồm tất cả tính năng (13+ points)\n\n" .
+               "2. Simple: bao gồm tính năng cơ bản, tổng 8-13 points\n" .
+               "3. Standard: bao gồm tính năng chính, tổng 13-21 points\n" .
+               "4. Comprehensive: bao gồm tất cả tính năng, tổng 21+ points\n" .
+               "5. ⭐ QUAN TRỌNG: Mỗi US phải có points hợp lý (3, 5, 8, 13 hoặc tương tự)\n\n" .
                "Trả về JSON array gồm 3 objects, mỗi object có structure:\n" .
                "{\n" .
                "  \"name\": \"Simple/Standard/Comprehensive Approach\",\n" .
                "  \"description\": \"Mô tả ngắn\",\n" .
                "  \"stories\": [\n" .
-               "    {\"title\": \"US title\", \"points\": 3}\n" .
+               "    {\"title\": \"US title\", \"points\": 5},\n" .
+               "    {\"title\": \"Another US\", \"points\": 8}\n" .
                "  ],\n" .
-               "  \"total_points\": 8\n" .
+               "  \"total_points\": 13\n" .
                "}\n\n" .
-               "Trả về chỉ JSON, không có text khác.";
+               "⚠️ Trả về chỉ JSON, không có text khác. Mỗi story PHẢI có field 'points' > 0.";
     }
 
     // Lưu User Stories vào database
@@ -382,7 +422,7 @@ class AIAssistantController extends Controller
         ]);
 
         $session = AIChatSession::findOrFail($request->session_id);
-        
+
         if (!$session->epic) {
             return response()->json(['error' => 'Epic không tồn tại'], 400);
         }
@@ -399,7 +439,9 @@ class AIAssistantController extends Controller
                     'title' => $story['title'] ?? 'Untitled',
                     'description' => $story['description'] ?? $request->approach_name,
                     'status_id' => $defaultStatus?->id ?? TaskStatus::first()?->id,
-                    'story_point' => $story['points'] ?? 0,
+                    // Persist story points to canonical column `storyPoints`
+                    // Accept both `story_point` (from UI) and `points` (from Gemini)
+                    'storyPoints' => $story['story_point'] ?? $story['points'] ?? 0,
                     'created_by' => $user->id,
                     'team_id' => $session->team_id,
                 ]);
@@ -495,7 +537,7 @@ class AIAssistantController extends Controller
                 'description' => $us->description,
                 'storyPoints' => $us->storyPoints,
                 'epic_title' => $us->epic?->title,
-                'sprint_id' => $us->sprint_id, // 🔥 Thêm sprint_id để frontend tạo subtasks với đúng sprint
+                'sprint_id' => $us->sprint_id, //  Thêm sprint_id để frontend tạo subtasks với đúng sprint
             ],
             'subtasks' => $subtasks,
             'preset' => $preset,

@@ -662,6 +662,23 @@ class TasksController extends Controller
             }])
             ->get();
 
+        // 🔁 Fallback: Nếu team chưa cấu hình cột, dùng cột global (team_id NULL)
+        if ($columns->isEmpty()) {
+            $columns = TaskStatus::whereNull('team_id')
+                ->orderBy('order_index', 'asc')
+                ->with(['tasks' => function($query) use ($activeSprint) {
+                    if ($activeSprint) {
+                        $query->where('sprint_id', $activeSprint->id)
+                              ->with('assignee')
+                              ->withCount('comments')
+                              ->orderBy('order_index', 'asc');
+                    } else {
+                        $query->whereNull('id');
+                    }
+                }])
+                ->get();
+        }
+
         // Lấy các task trong Product Backlog (chưa thuộc sprint nào)
     $backlogTasks = Tasks::whereNull('sprint_id')
                  ->with(['assignee', 'epic'])
@@ -695,6 +712,8 @@ class TasksController extends Controller
                     'id' => $t->id,
                     'title' => $t->title,
                     'epic_title' => $t->epic->title ?? null,
+                    // Expose canonical story points field; keep alias for UI compatibility
+                    'storyPoints' => $t->storyPoints ?? 0,
                 ];
             });
 
@@ -814,11 +833,49 @@ class TasksController extends Controller
             'assigned_to' => 'nullable|exists:users,id',
             'parent_id' => 'nullable|exists:tasks,id', // Cho phép tạo subtask
             'sprint_id' => 'nullable|exists:sprints,id',
-            'status_id' => 'nullable|exists:task_statuses,id', // 🔥 Thay status bằng status_id
+            'status_id' => 'nullable|exists:task_statuses,id', //  Thay status bằng status_id
         ]);
 
-        // 🔥 Lấy status mặc định (To Do) nếu không chọn
-        $defaultStatusId = TaskStatus::where('name', 'To Do')->value('id') ?? 1;
+        // Resolve a safe default status_id
+        // Priority:
+        // 1) Use provided validated status_id
+        // 2) First non-done status for this team (by order_index)
+        // 3) First non-done global status (team_id NULL)
+        // 4) Bootstrap global defaults (To Do / In Progress / Done) and use To Do
+        $defaultStatusId = $validated['status_id'] ?? null;
+
+        if (!$defaultStatusId && $team) {
+            $defaultStatusId = TaskStatus::where('team_id', $team->id)
+                ->where('is_done', false)
+                ->orderBy('order_index', 'asc')
+                ->value('id');
+        }
+
+        if (!$defaultStatusId) {
+            $defaultStatusId = TaskStatus::whereNull('team_id')
+                ->where('is_done', false)
+                ->orderBy('order_index', 'asc')
+                ->value('id');
+        }
+
+        if (!$defaultStatusId) {
+            // Bootstrap global defaults to avoid FK errors on fresh installs
+            $defaultStatusId = DB::transaction(function () {
+                $todo = TaskStatus::firstOrCreate(
+                    ['name' => 'To Do'],
+                    ['order_index' => 1, 'is_done' => false, 'color_class' => 'border-gray-300', 'team_id' => null]
+                );
+                TaskStatus::firstOrCreate(
+                    ['name' => 'In Progress'],
+                    ['order_index' => 2, 'is_done' => false, 'color_class' => 'border-blue-300', 'team_id' => null]
+                );
+                TaskStatus::firstOrCreate(
+                    ['name' => 'Done'],
+                    ['order_index' => 3, 'is_done' => true, 'color_class' => 'border-green-300', 'team_id' => null]
+                );
+                return $todo->id;
+            });
+        }
 
         $task = Tasks::create([
             'title' => $validated['title'],
@@ -829,7 +886,7 @@ class TasksController extends Controller
             'created_by' => Auth::id(),
             'parent_id' => $validated['parent_id'] ?? null,
             'sprint_id' => $validated['sprint_id'] ?? null,
-            'status_id' => $validated['status_id'] ?? $defaultStatusId, // 🔥 Dùng status_id
+            'status_id' => $defaultStatusId, // 🔥 Dùng status_id với fallback an toàn
         ]);
 
         return response()->json([
