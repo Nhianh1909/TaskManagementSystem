@@ -1,0 +1,234 @@
+<mxfile host="app.diagrams.net" modified="2025-12-30T12:56:47.000Z" agent="5.0" etag="abc123" version="24.0">
+  <diagram name="Task Management System Use Cases" id="usecase_diagram">
+    <mxGraphModel dx="1200" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        
+        <!-- System Boundary -->
+        <mxCell id="system_boundary" value="Task Management System" style="shape=rectangle;html=1;verticalAlign=top;horizontalAlign=center;fontSize=16;fontStyle=bold;fillColor=none;strokeColor=black;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="100" y="50" width="1000" height="800" as="geometry" />
+        </mxCell>
+        
+        <!-- ACTORS -->
+        <!-- User Actor -->
+        <mxCell id="actor_user" value="User" style="shape=umlActor;html=1;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;" vertex="1" parent="1">
+          <mxGeometry x="20" y="300" width="50" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- Scrum Master Actor -->
+        <mxCell id="actor_scrum" value="Scrum Master" style="shape=umlActor;html=1;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;" vertex="1" parent="1">
+          <mxGeometry x="20" y="500" width="50" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- Product Owner Actor -->
+        <mxCell id="actor_po" value="Product Owner" style="shape=umlActor;html=1;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;" vertex="1" parent="1">
+          <mxGeometry x="1130" y="400" width="50" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- MODULE 1: TASK MANAGEMENT (Tasks & Assignments) -->
+        <!-- Module 1 Label -->
+        <mxCell id="module1_label" value="Module 1: Task Management" style="text=1;fontSize=12;fontStyle=bold;align=left;fillColor=#E1F5FE;strokeColor=#01579B;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="120" y="80" width="200" height="25" as="geometry" />
+        </mxCell>
+        
+        <!-- UC1: Create Task -->
+        <mxCell id="uc1" value="Create Task" style="ellipse;whiteSpace=wrap;html=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="150" y="120" width="90" height="50" as="geometry" />
+        </mxCell>
+        
+        <!-- UC2: Edit Task -->
+        <mxCell id="uc2" value="Edit Task" style="ellipse;whiteSpace=wrap;html=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="260" y="120" width="90" height="50" as="geometry" />
+        </mxCell>
+        
+        <!-- UC3: Delete Task -->
+        <mxCell id="uc3" value="Delete Task" style="ellipse;whiteSpace=wrap;html=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="370" y="120" width="90" height="50" as="geometry" />
+        </mxCell>
+        
+        <!-- UC4: Assign Task -->
+        <mxCell id="uc4" value="Assign Task" style="ellipse;whiteSpace=wrap;html=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="150" y="200" width="90" height="50" as="geometry" />
+        </mxCell>
+        
+        <!-- UC5: View Task Details -->
+        <mxCell id="uc5" value="View Task Details" style="ellipse;whiteSpace=wrap;html=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="260" y="200" width="90" height="50" as="geometry" />
+        </mxCell>
+        
+        <!-- MODULE 2: SPRINT MANAGEMENT -->
+        <!-- Module 2 Label -->
+        <mxCell id="module2_label" value="Module 2: Sprint Management" style="text=1;fontSize=12;fontStyle=bold;align=left;fillColor=#F3E5F5;strokeColor=#4A148C;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="480" y="80" width="200" height="25" as="geometry" />
+        </mxCell>
+        
+        <!-- UC6: Create Sprint -->
+        <mxCell id="uc6" value="Create Sprint" style="ellipse;whiteSpace=wrap;html=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="510" y="120" width="90" height="50" as="geometry" />
+        </mxCell>
+        
+        <!-- UC7: Plan Sprint -->
+        <mxCell id="uc7" value="Plan Sprint" style="ellipse;whiteSpace=wrap;html=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="620" y="120" width="90" height="50" as="geometry" />
+        </mxCell>
+        
+        <!-- UC8: Start Sprint -->
+        <mxCell id="uc8" value="Start Sprint" style="ellipse;whiteSpace=wrap;html=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="510" y="200" width="90" height="50" as="geometry" />
+        </mxCell>
+        
+        <!-- UC9: Close Sprint -->
+        <mxCell id="uc9" value="Close Sprint" style="ellipse;whiteSpace=wrap;html=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="620" y="200" width="90" height="50" as="geometry" />
+        </mxCell>
+        
+        <!-- MODULE 3: REPORTING & TRACKING -->
+        <!-- Module 3 Label -->
+        <mxCell id="module3_label" value="Module 3: Reporting & Tracking" style="text=1;fontSize=12;fontStyle=bold;align=left;fillColor=#E8F5E9;strokeColor=#1B5E20;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="750" y="80" width="200" height="25" as="geometry" />
+        </mxCell>
+        
+        <!-- UC10: Generate Report -->
+        <mxCell id="uc10" value="Generate Report" style="ellipse;whiteSpace=wrap;html=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="780" y="120" width="90" height="50" as="geometry" />
+        </mxCell>
+        
+        <!-- UC11: Track Progress -->
+        <mxCell id="uc11" value="Track Progress" style="ellipse;whiteSpace=wrap;html=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="890" y="120" width="90" height="50" as="geometry" />
+        </mxCell>
+        
+        <!-- UC12: View Burndown Chart -->
+        <mxCell id="uc12" value="View Burndown Chart" style="ellipse;whiteSpace=wrap;html=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="780" y="200" width="90" height="50" as="geometry" />
+        </mxCell>
+        
+        <!-- MODULE 4: COLLABORATION & COMMUNICATION -->
+        <!-- Module 4 Label -->
+        <mxCell id="module4_label" value="Module 4: Collaboration" style="text=1;fontSize=12;fontStyle=bold;align=left;fillColor=#FCE4EC;strokeColor=#880E4F;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="150" y="320" width="200" height="25" as="geometry" />
+        </mxCell>
+        
+        <!-- UC13: Add Comment -->
+        <mxCell id="uc13" value="Add Comment" style="ellipse;whiteSpace=wrap;html=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="150" y="370" width="90" height="50" as="geometry" />
+        </mxCell>
+        
+        <!-- UC14: Manage Attachments -->
+        <mxCell id="uc14" value="Manage Attachments" style="ellipse;whiteSpace=wrap;html=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="260" y="370" width="90" height="50" as="geometry" />
+        </mxCell>
+        
+        <!-- UC15: Send Notification -->
+        <mxCell id="uc15" value="Send Notification" style="ellipse;whiteSpace=wrap;html=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="150" y="450" width="90" height="50" as="geometry" />
+        </mxCell>
+        
+        <!-- MODULE 5: ADMINISTRATION & CONFIGURATION -->
+        <!-- Module 5 Label -->
+        <mxCell id="module5_label" value="Module 5: Administration" style="text=1;fontSize=12;fontStyle=bold;align=left;fillColor=#FFF3E0;strokeColor=#E65100;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="510" y="320" width="200" height="25" as="geometry" />
+        </mxCell>
+        
+        <!-- UC16: Manage Users -->
+        <mxCell id="uc16" value="Manage Users" style="ellipse;whiteSpace=wrap;html=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="510" y="370" width="90" height="50" as="geometry" />
+        </mxCell>
+        
+        <!-- UC17: Configure Settings -->
+        <mxCell id="uc17" value="Configure Settings" style="ellipse;whiteSpace=wrap;html=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="620" y="370" width="90" height="50" as="geometry" />
+        </mxCell>
+        
+        <!-- ASSOCIATIONS - User Actor -->
+        <mxCell id="assoc_user_uc1" edge="1" parent="1" source="actor_user" target="uc1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="assoc_user_uc2" edge="1" parent="1" source="actor_user" target="uc2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="assoc_user_uc3" edge="1" parent="1" source="actor_user" target="uc3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="assoc_user_uc4" edge="1" parent="1" source="actor_user" target="uc4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="assoc_user_uc5" edge="1" parent="1" source="actor_user" target="uc5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="assoc_user_uc13" edge="1" parent="1" source="actor_user" target="uc13">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="assoc_user_uc14" edge="1" parent="1" source="actor_user" target="uc14">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <!-- ASSOCIATIONS - Scrum Master Actor -->
+        <mxCell id="assoc_scrum_uc6" edge="1" parent="1" source="actor_scrum" target="uc6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="assoc_scrum_uc7" edge="1" parent="1" source="actor_scrum" target="uc7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="assoc_scrum_uc8" edge="1" parent="1" source="actor_scrum" target="uc8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="assoc_scrum_uc9" edge="1" parent="1" source="actor_scrum" target="uc9">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="assoc_scrum_uc11" edge="1" parent="1" source="actor_scrum" target="uc11">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="assoc_scrum_uc12" edge="1" parent="1" source="actor_scrum" target="uc12">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="assoc_scrum_uc15" edge="1" parent="1" source="actor_scrum" target="uc15">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="assoc_scrum_uc16" edge="1" parent="1" source="actor_scrum" target="uc16">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <!-- ASSOCIATIONS - Product Owner Actor -->
+        <mxCell id="assoc_po_uc1" edge="1" parent="1" source="actor_po" target="uc1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="assoc_po_uc5" edge="1" parent="1" source="actor_po" target="uc5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="assoc_po_uc7" edge="1" parent="1" source="actor_po" target="uc7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="assoc_po_uc10" edge="1" parent="1" source="actor_po" target="uc10">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="assoc_po_uc11" edge="1" parent="1" source="actor_po" target="uc11">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="assoc_po_uc17" edge="1" parent="1" source="actor_po" target="uc17">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
