@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use App\Models\Tasks;
 use App\Models\TasksComments;
+use App\Models\TaskStatus;
 
 /**
  * Controller xử lý trang User Profile
@@ -38,29 +39,32 @@ class UserProfileController extends Controller
         };
         
         // ===== THỐNG KÊ TASKS CỦA USER =====
-        // Đếm số lượng tasks đã hoàn thành (status = done)
+        // Đếm số lượng tasks đã hoàn thành (is_done = true)
         $tasksDone = Tasks::where('assigned_to', $user->id)
-            ->where('status', 'done')
+            ->whereHas('status', function ($q) {
+                $q->where('is_done', true);
+            })
             ->count();
         
-        // Đếm số lượng tasks đang làm (status = inProgress)
+        // Đếm số lượng tasks đang làm hoặc chưa bắt đầu (is_done = false)
         $tasksInProgress = Tasks::where('assigned_to', $user->id)
-            ->where('status', 'inProgress')
+            ->whereHas('status', function ($q) {
+                $q->where('is_done', false);
+            })
             ->count();
         
-        // Đếm số lượng tasks chưa bắt đầu (status = toDo)
-        $tasksTodo = Tasks::where('assigned_to', $user->id)
-            ->where('status', 'toDo')
-            ->count();
+        // Tính tổng tất cả tasks (không cần kiểm tra status)
+        $totalTasks = Tasks::where('assigned_to', $user->id)->count();
         
         // Tính tổng story points từ các tasks đã hoàn thành
         // ?? 0 nghĩa là nếu null thì trả về 0
         $totalStoryPoints = Tasks::where('assigned_to', $user->id)
-            ->where('status', 'done')
+            ->whereHas('status', function ($q) {
+                $q->where('is_done', true);
+            })
             ->sum('storyPoints') ?? 0;
         
         // Tính phần trăm hoàn thành = (số tasks done / tổng số tasks) * 100
-        $totalTasks = Tasks::where('assigned_to', $user->id)->count();
         $averageCompletion = $totalTasks > 0 ? round(($tasksDone / $totalTasks) * 100) : 0;
         
         // ===== LẤY DANH SÁCH SUBTASKS =====
@@ -68,7 +72,7 @@ class UserProfileController extends Controller
         // with() để eager load luôn thông tin parent task và sprint (tránh N+1 query)
         $subtasks = Tasks::where('assigned_to', $user->id)
             ->whereNotNull('parent_id') // Chỉ lấy subtasks (có parent)
-            ->with(['parent:id,title', 'sprint:id,name,endDate']) // Load kèm parent và sprint
+            ->with(['parent:id,title', 'sprint:id,name,end_date']) // Load kèm parent và sprint
             ->orderBy('created_at', 'desc') // Sắp xếp mới nhất trước
             ->limit(10) // Giới hạn 10 subtasks
             ->get();
@@ -79,7 +83,9 @@ class UserProfileController extends Controller
         
         // 1. Lấy các tasks vừa hoàn thành
         $completedTasks = Tasks::where('assigned_to', $user->id)
-            ->where('status', 'done')
+            ->whereHas('status', function ($q) {
+                $q->where('is_done', true);
+            })
             ->orderBy('updated_at', 'desc') // Sắp xếp theo thời gian update
             ->limit(5)
             ->get(['id', 'title', 'updated_at']); // Chỉ lấy các field cần thiết
@@ -111,9 +117,11 @@ class UserProfileController extends Controller
             ]);
         }
         
-        // 3. Lấy các tasks mới được gán (chưa bắt đầu làm)
+        // 3. Lấy các tasks mới được gán (chưa bắt đầu làm - status có is_done = false)
         $newTasks = Tasks::where('assigned_to', $user->id)
-            ->where('status', 'toDo')
+            ->whereHas('status', function ($q) {
+                $q->where('is_done', false);
+            })
             ->orderBy('created_at', 'desc')
             ->limit(5)
             ->get(['id', 'title', 'created_at']);
@@ -138,8 +146,7 @@ class UserProfileController extends Controller
             'team',              // Team của user
             'roleDisplay',       // Role hiển thị đẹp
             'tasksDone',         // Số tasks hoàn thành
-            'tasksInProgress',   // Số tasks đang làm
-            'tasksTodo',         // Số tasks chưa bắt đầu
+            'tasksInProgress',   // Số tasks chưa hoàn thành (inProgress + toDo)
             'totalStoryPoints',  // Tổng story points
             'averageCompletion', // % hoàn thành
             'subtasks',          // Danh sách subtasks

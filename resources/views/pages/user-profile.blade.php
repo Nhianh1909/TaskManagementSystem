@@ -162,22 +162,28 @@
                                         {{-- Status với badge màu --}}
                                         <td class="py-3 px-2">
                                             @php
-                                                // Map status với label và màu badge
-                                                $statusMap = [
-                                                    'done' => ['label' => 'Done', 'class' => 'bg-gray-800 text-white'],
-                                                    'inProgress' => ['label' => 'In Progress', 'class' => 'bg-gray-500 text-white'],
-                                                    'toDo' => ['label' => 'Todo', 'class' => 'bg-gray-200 text-gray-800']
-                                                ];
-                                                $status = $statusMap[$subtask->status] ?? ['label' => ucfirst($subtask->status), 'class' => 'bg-gray-100 text-gray-800'];
+                                                // Dựa vào is_done của status relationship
+                                                $statusLabel = 'Unknown';
+                                                $statusClass = 'bg-gray-100 text-gray-800';
+                                                
+                                                if ($subtask->status) {
+                                                    if ($subtask->status->is_done) {
+                                                        $statusLabel = 'Done';
+                                                        $statusClass = 'bg-green-500 text-white';
+                                                    } else {
+                                                        $statusLabel = $subtask->status->name ?? 'In Progress';
+                                                        $statusClass = 'bg-blue-500 text-white';
+                                                    }
+                                                }
                                             @endphp
-                                            <span class="px-2 py-1 rounded text-xs font-medium {{ $status['class'] }}">
-                                                {{ $status['label'] }}
+                                            <span class="px-3 py-1 rounded text-xs font-medium whitespace-nowrap {{ $statusClass }}">
+                                                {{ $statusLabel }}
                                             </span>
                                         </td>
                                         {{-- Due Date từ sprint --}}
                                         <td class="py-3 px-2 text-sm text-gray-600">
-                                            @if($subtask->sprint && $subtask->sprint->endDate)
-                                                {{ \Carbon\Carbon::parse($subtask->sprint->endDate)->format('M d') }}
+                                            @if($subtask->sprint && $subtask->sprint->end_date)
+                                                {{ \Carbon\Carbon::parse($subtask->sprint->end_date)->format('M d') }}
                                             @else
                                                 <span class="text-gray-400">-</span>
                                             @endif

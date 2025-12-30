@@ -44,8 +44,19 @@
     {{-- @include('pages.settings') --}}
 {{-- ----------------------------------- --}}
 
-    {{-- AI Floating Button - Available on all pages --}}
-    @include('components.ai-floating-button')
+    {{-- AI Floating Button - Chỉ dành cho PO và SM --}}
+    @php
+        $userRoleInTeam = null;
+        if (Auth::check()) {
+            $user = Auth::user();
+            $team = $user?->teams()->first();
+            $userRoleInTeam = $team ? $team->users()->find($user->id)?->pivot->roleInTeam : null;
+        }
+    @endphp
+
+    @if(in_array($userRoleInTeam, ['product_owner', 'scrum_master']))
+        @include('components.ai-floating-button')
+    @endif
 
     <script>
         // Initialize particles

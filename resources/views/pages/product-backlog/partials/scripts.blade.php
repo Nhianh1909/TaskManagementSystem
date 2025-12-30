@@ -678,7 +678,7 @@
         }
     })
 
-    // ✅ Open Edit Future Sprint Modal
+    // Open Edit Future Sprint Modal
     async function openEditFutureSprintModal(sprintId) {
         try {
             // Fetch sprint data

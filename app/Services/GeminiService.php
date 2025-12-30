@@ -43,9 +43,9 @@ class GeminiService
                         ],
                     ],
                     'generationConfig' => [
-                        'temperature' => 0.7,
-                        'topK' => 40,
-                        'topP' => 0.95,
+                        'temperature' => 0.7,//độ sáng tạo
+                        'topK' => 40,//giới hạn lựa chọn từ
+                        'topP' => 0.95,//xác suất tích lũy
                         'maxOutputTokens' => 4096,
                     ],
                 ]
@@ -55,6 +55,29 @@ class GeminiService
 
             if ($response->successful()) {
                 $data = $response->json();
+                // Cấu trúc response JSON từ Google Gemini API:
+                // {
+                //   "candidates": [                                          // <--- CẤP 1
+                //       // Ví dụ: Mảng chứa 1 hoặc nhiều phương án trả lời
+                //       // [ { "content": {...}, "finishReason": "STOP", ... } ]
+                //     {
+                //       "content": {                                         // <--- CẤP 2
+                //           // Ví dụ: Object chứa role và nội dung
+                //           // { "role": "model", "parts": [...] }
+                //         "parts": [                                         // <--- CẤP 3
+                //             // Ví dụ: Mảng các phần tử (Text hoặc Ảnh)
+                //             // [ { "text": "Kết quả..." } ]
+                //           {
+                //             "text": "..."                                  // <--- CẤP 4 (Cái mình cần lấy)
+                //             // Ví dụ thực tế: Chuỗi JSON string trả về
+                //             // "{\n \"subtasks\": [\n {\"title\": \"[BE] API Login\"...} \n ]\n}"
+                //           }
+                //         ]
+                //       }
+                //     }
+                //   ]
+                // }
+
                 $content = $data['candidates'][0]['content']['parts'][0]['text'] ?? null;
                 \Log::info('✅ Gemini content received: ' . substr($content, 0, 50) . '...');
                 return $content;

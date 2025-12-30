@@ -179,6 +179,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function reattachApproachListeners(approaches) {
         // Find all approach cards and re-attach listeners
+
         const approachCards = document.querySelectorAll('[data-approach-idx]');
         approachCards.forEach((card, idx) => {
             const approach = approaches[idx];
@@ -201,7 +202,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
         });
-        console.log('✅ Re-attached listeners to', approachCards.length, 'approach cards');
+        console.log('Re-attached listeners to', approachCards.length, 'approach cards');
     }
 
     function reattachSuggestionListeners() {
@@ -564,7 +565,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (_) {}
         return str;
     }
-
+    //Hàm này để
     function appendApproaches(approaches) {
         const area = document.getElementById('ai-chat-messages');
         const container = document.createElement('div');

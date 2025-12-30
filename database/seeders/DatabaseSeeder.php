@@ -85,6 +85,10 @@ class DatabaseSeeder extends Seeder
             $team->users()->attach($devId, ['roleInTeam' => 'developer']);
         }
         $teamMemberIds = $team->users()->pluck('users.id'); //lấy ra tất cả các user có trong team
+        
+        // Lấy chỉ developer để gán subtasks
+        $developerIds = User::where('role', 'developer')->pluck('id');
+        
         // --- 5. TẠO EPIC ---
         $this->command->info('Creating Epics for the team...');//dòng này để in thông báo khi chạy seeder
         //tạo ra 2 epic cho team vừa tạo
@@ -140,7 +144,7 @@ class DatabaseSeeder extends Seeder
             'parent_id' => $us1->id,
             'sprint_id' => $sprint1->id,
             'created_by' => $scrumMaster->id,
-            'assigned_to' => $teamMemberIds->random(),
+            'assigned_to' => $developerIds->random(),
             'status_id' => fake()->randomElement([$toDoId, $inProgressId, $doneId]), // ✨ Random ID
         ]);
         $us2 = Tasks::factory()->create([
@@ -157,7 +161,7 @@ class DatabaseSeeder extends Seeder
             'parent_id' => $us2->id,
             'sprint_id' => $sprint1->id,
             'created_by' => $scrumMaster->id,
-            'assigned_to' => $teamMemberIds->random(),
+            'assigned_to' => $developerIds->random(),
             'status_id' => $toDoId, // ✨ Dùng ID
         ]);
         // --- Tạo 1 User Story cho Product Backlog (chưa vào Sprint) ---
