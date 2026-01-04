@@ -45,6 +45,37 @@ Route::middleware('guest')->group(function () {
 Route::middleware('auth')->group(function () {
     Route::get('/dashboard', [TasksController::class, 'index'])->name('dashboard');
 
+    // // Test route for workload calculation
+    // Route::get('/test-workload', function () {
+    //     $user = Auth::user();
+    //     $team = $user->teams()->first();
+
+    //     if (!$team) {
+    //         return response()->json(['error' => 'No team found']);
+    //     }
+
+    //     $members = $team->users()
+    //         ->where('roleInTeam', '!=', 'product_owner')
+    //         ->withCount(['tasks as workload' => function ($query) {
+    //             $query->whereNotNull('parent_id')->where('storyPoints', 0);
+    //         }])
+    //         ->get()
+    //         ->map(function ($member) {
+    //             return [
+    //                 'id' => $member->id,
+    //                 'name' => $member->name,
+    //                 'role' => $member->pivot->roleInTeam ?? 'developer',
+    //                 'workload' => (int) ($member->workload ?? 0),
+    //                 'all_tasks' => $member->tasks()->get(['id', 'title', 'parent_id', 'storyPoints'])->toArray(),
+    //             ];
+    //         });
+
+    //     return response()->json([
+    //         'team' => $team->name,
+    //         'members' => $members,
+    //     ]);
+    // });
+
 
     //epic & user stories in product backlog
     Route::get('/product-backlog', [TasksController::class, 'productBacklog'])->name('product.backlog');

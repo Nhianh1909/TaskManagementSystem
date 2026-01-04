@@ -565,7 +565,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (_) {}
         return str;
     }
-    //Hàm này để
+
     function appendApproaches(approaches) {
         const area = document.getElementById('ai-chat-messages');
         const container = document.createElement('div');

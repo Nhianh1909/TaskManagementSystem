@@ -500,8 +500,10 @@ class AIAssistantController extends Controller
         if ($team) {
             $teamMembers = $team->users()
                 ->where('roleInTeam', '!=', 'product_owner')
-                ->withCount(['tasks as total_story_points' => function ($query) {
-                    $query->select(\DB::raw('sum(storyPoints)'));
+                ->withCount(['tasks as workload' => function ($query) {
+                    // Chỉ đếm subtasks: có parent_id và storyPoints = 0
+                    $query->whereNotNull('parent_id')
+                          ->where('storyPoints', 0);
                 }])
                 ->get()
                 ->map(function ($member) {
@@ -509,7 +511,7 @@ class AIAssistantController extends Controller
                         'id' => $member->id,
                         'name' => $member->name,
                         'role' => $member->pivot->roleInTeam ?? 'developer',
-                        'workload' => (int) ($member->total_story_points ?? 0),
+                        'workload' => (int) ($member->workload ?? 0),
                     ];
                 })
                 ->sortBy('workload')
